@@ -4,8 +4,8 @@ import logging
 from typing import Optional
 
 # This will be generated after running the protoc command
-import medical_qa_pb2
-import medical_qa_pb2_grpc
+from . import medical_qa_pb2
+from . import medical_qa_pb2_grpc
 
 class MedicalQAService(medical_qa_pb2_grpc.MedicalQAServiceServicer):
     def __init__(self):
@@ -18,7 +18,7 @@ class MedicalQAService(medical_qa_pb2_grpc.MedicalQAServiceServicer):
             # TODO: Implement LLM logic
             draft_answer = "This is a placeholder draft answer"
             
-            return medical_qa_pb2.AnswerResponse(
+            return medical_qa_pb2.QuestionResponse(
                 question_id=request.question_id,
                 draft_answer=draft_answer,
                 confidence_score=0.95,
@@ -27,7 +27,7 @@ class MedicalQAService(medical_qa_pb2_grpc.MedicalQAServiceServicer):
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f'Error generating draft: {str(e)}')
-            return medical_qa_pb2.AnswerResponse()
+            return medical_qa_pb2.QuestionResponse()
 
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
@@ -36,8 +36,10 @@ def serve():
     )
     server.add_insecure_port('[::]:50051')
     server.start()
+    logging.info("Server started on port 50051")
     server.wait_for_termination()
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
+    logging.info("Starting Medical QA Service...")
     serve()

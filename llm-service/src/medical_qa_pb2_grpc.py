@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import medical_qa_pb2 as medical__qa__pb2
+from . import medical_qa_pb2 as medical__qa__pb2
 
 
 class MedicalQAServiceStub(object):
