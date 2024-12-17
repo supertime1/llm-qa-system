@@ -12,4 +12,4 @@ protoc \
     -I../proto \
     --go_out=../backend-service/src \
     --go-grpc_out=../backend-service/src \
-    ../proto/medical_qa.proto
+    ../proto/medical_service.proto
