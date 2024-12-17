@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package backend;
+
+option go_package = "github.com/supertime1/llm-qa-system/proto/";
+
+// Backend Service - Handles business logic and data operations
+service MedicalService {
+    // Patient asks a question
+    rpc AskQuestion (QuestionRequest) returns (QuestionResponse) {}
+    
+    // Doctor reviews an answer
+    rpc ReviewAnswer (ReviewRequest) returns (ReviewResponse) {}
+    
+    // Get patient information
+    // rpc GetPatientInfo (PatientInfoRequest) returns (PatientInfoResponse) {}
+    
+    // ... other business operations
+}
+
+message QuestionRequest {
+    string patient_id = 1;
+    string question = 2;
+}
+
+message QuestionResponse {
+    string question_id = 1;
+    string status = 2;  // "pending_review", "approved", etc.
+}
+
+message ReviewRequest {
+    string question_id = 1;
+    string doctor_id = 2;
+    bool is_approved = 3;
+    string modified_answer = 4;
+    string comment = 5;
+}
+
+message ReviewResponse {
+    bool success = 1;
+    string status = 2;
+}
+
+// ... other message definitions

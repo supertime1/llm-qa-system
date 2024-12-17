@@ -6,7 +6,9 @@ from . import medical_qa_pb2 as medical__qa__pb2
 
 
 class MedicalQAServiceStub(object):
-    """Main QA service definition
+    """option go_package = "llm-qa-system/proto";
+
+    Main QA service definition
     """
 
     def __init__(self, channel):
@@ -20,26 +22,16 @@ class MedicalQAServiceStub(object):
                 request_serializer=medical__qa__pb2.QuestionRequest.SerializeToString,
                 response_deserializer=medical__qa__pb2.QuestionResponse.FromString,
                 )
-        self.ReviewAnswer = channel.unary_unary(
-                '/medical_qa.MedicalQAService/ReviewAnswer',
-                request_serializer=medical__qa__pb2.ReviewRequest.SerializeToString,
-                response_deserializer=medical__qa__pb2.ReviewResponse.FromString,
-                )
 
 
 class MedicalQAServiceServicer(object):
-    """Main QA service definition
+    """option go_package = "llm-qa-system/proto";
+
+    Main QA service definition
     """
 
     def GenerateDraftAnswer(self, request, context):
         """Generate a draft answer for medical questions
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ReviewAnswer(self, request, context):
-        """Review and modify draft answer
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -53,11 +45,6 @@ def add_MedicalQAServiceServicer_to_server(servicer, server):
                     request_deserializer=medical__qa__pb2.QuestionRequest.FromString,
                     response_serializer=medical__qa__pb2.QuestionResponse.SerializeToString,
             ),
-            'ReviewAnswer': grpc.unary_unary_rpc_method_handler(
-                    servicer.ReviewAnswer,
-                    request_deserializer=medical__qa__pb2.ReviewRequest.FromString,
-                    response_serializer=medical__qa__pb2.ReviewResponse.SerializeToString,
-            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'medical_qa.MedicalQAService', rpc_method_handlers)
@@ -66,7 +53,9 @@ def add_MedicalQAServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class MedicalQAService(object):
-    """Main QA service definition
+    """option go_package = "llm-qa-system/proto";
+
+    Main QA service definition
     """
 
     @staticmethod
@@ -83,22 +72,5 @@ class MedicalQAService(object):
         return grpc.experimental.unary_unary(request, target, '/medical_qa.MedicalQAService/GenerateDraftAnswer',
             medical__qa__pb2.QuestionRequest.SerializeToString,
             medical__qa__pb2.QuestionResponse.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def ReviewAnswer(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/medical_qa.MedicalQAService/ReviewAnswer',
-            medical__qa__pb2.ReviewRequest.SerializeToString,
-            medical__qa__pb2.ReviewResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

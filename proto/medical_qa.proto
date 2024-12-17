@@ -1,22 +1,45 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 package medical_qa;
 
-option go_package = "llm-qa-system/proto";
+// option go_package = "llm-qa-system/proto";
 
 // Main QA service definition
 service MedicalQAService {
     // Generate a draft answer for medical questions
     rpc GenerateDraftAnswer (QuestionRequest) returns (QuestionResponse) {}
-    // Review and modify draft answer
-    rpc ReviewAnswer (ReviewRequest) returns (ReviewResponse) {}
 }
 
 message QuestionRequest {
     string question_id = 1;
     string question_text = 2;
-    string patient_context = 3;
-    string medical_category = 4;
+    UserContext user_context = 3;
+}
+
+message UserContext {
+    UserInfo user_info = 1;
+    repeated BiometricData biometric_data = 2;
+    repeated ChatMessage chat_history = 3;
+}
+
+message UserInfo {
+    string age = 1;
+    string gender = 2;
+    repeated string medical_history = 3;
+}
+
+message BiometricData {
+    string type = 1;
+    string value = 2;
+    google.protobuf.Timestamp timestamp = 3;
+}
+
+message ChatMessage {
+    string role = 1;
+    string content = 2;
+    google.protobuf.Timestamp timestamp = 3;
 }
 
 message QuestionResponse {
@@ -24,20 +47,4 @@ message QuestionResponse {
     string draft_answer = 2;
     repeated string references = 3;
     float confidence_score = 4;
-}
-
-message ReviewRequest {
-    string question_id = 1;
-    string draft_answer = 2;
-    string reviewer_id = 3;
-    string reviewer_comments = 4;
-    bool is_approved = 5;
-}
-
-message ReviewResponse {
-    string question_id = 1;
-    string final_answer = 2;
-    string review_status = 3;
-    string reviewer_id = 4;
-    string review_timestamp = 5;
 }

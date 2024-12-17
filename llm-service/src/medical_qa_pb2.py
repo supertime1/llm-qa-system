@@ -11,24 +11,28 @@ from google.protobuf.internal import builder as _builder
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10medical_qa.proto\x12\nmedical_qa\"p\n\x0fQuestionRequest\x12\x13\n\x0bquestion_id\x18\x01 \x01(\t\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12\x17\n\x0fpatient_context\x18\x03 \x01(\t\x12\x18\n\x10medical_category\x18\x04 \x01(\t\"k\n\x10QuestionResponse\x12\x13\n\x0bquestion_id\x18\x01 \x01(\t\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x12\n\nreferences\x18\x03 \x03(\t\x12\x18\n\x10\x63onfidence_score\x18\x04 \x01(\x02\"\x7f\n\rReviewRequest\x12\x13\n\x0bquestion_id\x18\x01 \x01(\t\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x13\n\x0breviewer_id\x18\x03 \x01(\t\x12\x19\n\x11reviewer_comments\x18\x04 \x01(\t\x12\x13\n\x0bis_approved\x18\x05 \x01(\x08\"\x81\x01\n\x0eReviewResponse\x12\x13\n\x0bquestion_id\x18\x01 \x01(\t\x12\x14\n\x0c\x66inal_answer\x18\x02 \x01(\t\x12\x15\n\rreview_status\x18\x03 \x01(\t\x12\x13\n\x0breviewer_id\x18\x04 \x01(\t\x12\x18\n\x10review_timestamp\x18\x05 \x01(\t2\xaf\x01\n\x10MedicalQAService\x12R\n\x13GenerateDraftAnswer\x12\x1b.medical_qa.QuestionRequest\x1a\x1c.medical_qa.QuestionResponse\"\x00\x12G\n\x0cReviewAnswer\x12\x19.medical_qa.ReviewRequest\x1a\x1a.medical_qa.ReviewResponse\"\x00\x42\x15Z\x13llm-qa-system/protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10medical_qa.proto\x12\nmedical_qa\x1a\x1fgoogle/protobuf/timestamp.proto\"l\n\x0fQuestionRequest\x12\x13\n\x0bquestion_id\x18\x01 \x01(\t\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12-\n\x0cuser_context\x18\x03 \x01(\x0b\x32\x17.medical_qa.UserContext\"\x98\x01\n\x0bUserContext\x12\'\n\tuser_info\x18\x01 \x01(\x0b\x32\x14.medical_qa.UserInfo\x12\x31\n\x0e\x62iometric_data\x18\x02 \x03(\x0b\x32\x19.medical_qa.BiometricData\x12-\n\x0c\x63hat_history\x18\x03 \x03(\x0b\x32\x17.medical_qa.ChatMessage\"@\n\x08UserInfo\x12\x0b\n\x03\x61ge\x18\x01 \x01(\t\x12\x0e\n\x06gender\x18\x02 \x01(\t\x12\x17\n\x0fmedical_history\x18\x03 \x03(\t\"[\n\rBiometricData\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"[\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"k\n\x10QuestionResponse\x12\x13\n\x0bquestion_id\x18\x01 \x01(\t\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x12\n\nreferences\x18\x03 \x03(\t\x12\x18\n\x10\x63onfidence_score\x18\x04 \x01(\x02\x32\x66\n\x10MedicalQAService\x12R\n\x13GenerateDraftAnswer\x12\x1b.medical_qa.QuestionRequest\x1a\x1c.medical_qa.QuestionResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'medical_qa_pb2', _globals)
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
-  DESCRIPTOR._serialized_options = b'Z\023llm-qa-system/proto'
-  _globals['_QUESTIONREQUEST']._serialized_start=32
-  _globals['_QUESTIONREQUEST']._serialized_end=144
-  _globals['_QUESTIONRESPONSE']._serialized_start=146
-  _globals['_QUESTIONRESPONSE']._serialized_end=253
-  _globals['_REVIEWREQUEST']._serialized_start=255
-  _globals['_REVIEWREQUEST']._serialized_end=382
-  _globals['_REVIEWRESPONSE']._serialized_start=385
-  _globals['_REVIEWRESPONSE']._serialized_end=514
-  _globals['_MEDICALQASERVICE']._serialized_start=517
-  _globals['_MEDICALQASERVICE']._serialized_end=692
+  _globals['_QUESTIONREQUEST']._serialized_start=65
+  _globals['_QUESTIONREQUEST']._serialized_end=173
+  _globals['_USERCONTEXT']._serialized_start=176
+  _globals['_USERCONTEXT']._serialized_end=328
+  _globals['_USERINFO']._serialized_start=330
+  _globals['_USERINFO']._serialized_end=394
+  _globals['_BIOMETRICDATA']._serialized_start=396
+  _globals['_BIOMETRICDATA']._serialized_end=487
+  _globals['_CHATMESSAGE']._serialized_start=489
+  _globals['_CHATMESSAGE']._serialized_end=580
+  _globals['_QUESTIONRESPONSE']._serialized_start=582
+  _globals['_QUESTIONRESPONSE']._serialized_end=689
+  _globals['_MEDICALQASERVICE']._serialized_start=691
+  _globals['_MEDICALQASERVICE']._serialized_end=793
 # @@protoc_insertion_point(module_scope)
