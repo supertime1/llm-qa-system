@@ -15,6 +15,11 @@ class MedicalQAService(medical_qa_pb2_grpc.MedicalQAServiceServicer):
         
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
+            
+        # Replace environment variables in config
+        if 'api_key' in self.config and self.config['api_key'].startswith('${'):
+            env_var = self.config['api_key'][2:-1]  # Remove ${ and }
+            self.config['api_key'] = os.environ.get(env_var)
         
         self.llm_service = LLMService(self.config)
         self.logger = logging.getLogger(__name__)
