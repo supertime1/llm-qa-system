@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 
-	pb "llm-qa-system/backend-service/proto"
+	pb "llm-qa-system/backend-service/src/proto"
 
 	"google.golang.org/grpc"
 )
