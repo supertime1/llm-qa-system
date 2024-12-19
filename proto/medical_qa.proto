@@ -4,7 +4,7 @@ import "google/protobuf/timestamp.proto";
 
 package medical_qa;
 
-// option go_package = "llm-qa-system/proto";
+option go_package = "github.com/supertime1/llm-qa-system/backend-service/src/proto";
 
 // Main QA service definition
 service MedicalQAService {

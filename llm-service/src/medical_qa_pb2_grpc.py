@@ -2,13 +2,11 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from . import medical_qa_pb2 as medical__qa__pb2
+import medical_qa_pb2 as medical__qa__pb2
 
 
 class MedicalQAServiceStub(object):
-    """option go_package = "llm-qa-system/proto";
-
-    Main QA service definition
+    """Main QA service definition
     """
 
     def __init__(self, channel):
@@ -25,9 +23,7 @@ class MedicalQAServiceStub(object):
 
 
 class MedicalQAServiceServicer(object):
-    """option go_package = "llm-qa-system/proto";
-
-    Main QA service definition
+    """Main QA service definition
     """
 
     def GenerateDraftAnswer(self, request, context):
@@ -53,9 +49,7 @@ def add_MedicalQAServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class MedicalQAService(object):
-    """option go_package = "llm-qa-system/proto";
-
-    Main QA service definition
+    """Main QA service definition
     """
 
     @staticmethod
