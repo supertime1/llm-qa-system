@@ -2,43 +2,159 @@ syntax = "proto3";
 
 package backend;
 
-option go_package = "github.com/supertime1/llm-qa-system/proto/";
+import "google/protobuf/timestamp.proto";
 
-// Backend Service - Handles business logic and data operations
+option go_package = "github.com/supertime1/llm-qa-system/backend-service/src/proto";
+
+// Backend Medical Service
 service MedicalService {
-    // Patient asks a question
-    rpc AskQuestion (QuestionRequest) returns (QuestionResponse) {}
-    
-    // Doctor reviews an answer
-    rpc ReviewAnswer (ReviewRequest) returns (ReviewResponse) {}
-    
-    // Get patient information
-    // rpc GetPatientInfo (PatientInfoRequest) returns (PatientInfoResponse) {}
-    
-    // ... other business operations
+    // Patient operations
+    rpc SubmitQuestion(PatientQuestionRequest) returns (PatientQuestionResponse) {}
+    rpc GetQuestionStatus(QuestionStatusRequest) returns (QuestionStatusResponse) {}
+    rpc GetAnswerHistory(AnswerHistoryRequest) returns (AnswerHistoryResponse) {}
+
+    // Doctor operations
+    rpc GetPendingReviews(PendingReviewsRequest) returns (PendingReviewsResponse) {}
+    rpc SubmitReview(ReviewSubmissionRequest) returns (ReviewSubmissionResponse) {}
 }
 
-message QuestionRequest {
-    string patient_id = 1;
-    string question = 2;
+// Common types
+enum QuestionType {
+    TYPE_UNSPECIFIED = 0;    // Default value when type is not specified
+    TYPE_GENERAL = 1;        // e.g., "What are the symptoms of flu?"
+    TYPE_MEDICATION = 2;     // e.g., "Can I take ibuprofen with my current medications?"
+    TYPE_DIAGNOSIS = 3;      // e.g., "What could these symptoms indicate?"
+    TYPE_FOLLOW_UP = 4;      // e.g., "How should I monitor my condition after treatment?"
 }
 
-message QuestionResponse {
-    string question_id = 1;
-    string status = 2;  // "pending_review", "approved", etc.
+enum QuestionStatus {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_PENDING = 1;           // Question just submitted
+    STATUS_PROCESSING = 2;        // AI is generating answer
+    STATUS_PENDING_REVIEW = 3;    // AI finished, waiting for doctor
+    STATUS_UNDER_REVIEW = 4;      // Doctor currently reviewing
+    STATUS_ANSWERED = 5;          // Final answer available to patient
+    STATUS_REJECTED = 6;          // Question rejected (inappropriate/unclear)
 }
 
-message ReviewRequest {
-    string question_id = 1;
-    string doctor_id = 2;
-    bool is_approved = 3;
-    string modified_answer = 4;
-    string comment = 5;
+enum Department {
+    DEPT_UNSPECIFIED = 0;
+    DEPT_GENERAL_MEDICINE = 1;    // General health questions
+    DEPT_CARDIOLOGY = 2;         // Heart-related questions
+    DEPT_PEDIATRICS = 3;         // Child health questions
+    DEPT_DERMATOLOGY = 4;        // Skin-related questions
 }
 
-message ReviewResponse {
-    bool success = 1;
-    string status = 2;
+message PaginationParams {
+    int32 limit = 1;     // Number of items per page (e.g., 10)
+    int32 offset = 2;    // Starting position (e.g., 0 for first page, 10 for second page)
 }
 
-// ... other message definitions
+// Patient operations messages
+message PatientQuestionRequest {
+    string patient_id = 1;        // UUID of the patient
+    string question_text = 2;     // The actual question (e.g., "What are the side effects of aspirin?")
+    QuestionType question_type = 3;// Category of question (e.g., TYPE_MEDICATION)
+    Department department = 4;     // Relevant department (e.g., DEPT_CARDIOLOGY)
+    int32 urgency_level = 5;      // 1-5 scale (1=routine, 5=urgent)
+}
+
+message PatientQuestionResponse {
+    string question_id = 1;       // UUID of the created question
+    QuestionStatus status = 2;    // Initial status (usually STATUS_PENDING)
+    google.protobuf.Timestamp estimated_completion_time = 3;  // When answer is expected
+    string error_message = 4;     // Error details if submission failed
+}
+
+message QuestionStatusRequest {
+    string question_id = 1;       // UUID of the question to check
+    string patient_id = 2;        // Patient UUID for authorization
+}
+
+message QuestionStatusResponse {
+    string question_id = 1;           // Question UUID
+    QuestionStatus status = 2;        // Current status
+    string answer = 3;               // Answer text (if status is ANSWERED)
+    google.protobuf.Timestamp answered_at = 4;  // When the answer was provided
+    string answered_by = 5;          // Doctor's ID or name who reviewed
+    string error_message = 6;        // Any error information
+}
+
+message AnswerHistoryRequest {
+    string patient_id = 1;           // Patient UUID
+    PaginationParams pagination = 2;  // e.g., {limit: 10, offset: 0} for first page
+    QuestionStatus status_filter = 3; // Filter by status (e.g., only ANSWERED)
+    google.protobuf.Timestamp date_from = 4;  // Start date for history
+    google.protobuf.Timestamp date_to = 5;    // End date for history
+}
+
+message AnswerHistoryResponse {
+    repeated QuestionAnswer answers = 1;  // List of answers
+    int32 total_count = 2;               // Total number of answers (for pagination)
+}
+
+message QuestionAnswer {
+    string question_id = 1;              // Question UUID
+    string question_text = 2;            // Original question
+    QuestionType question_type = 3;      // Question category
+    Department department = 4;           // Relevant department
+    string answer = 5;                  // Answer text
+    QuestionStatus status = 6;           // Current status
+    google.protobuf.Timestamp created_at = 7;   // When question was asked
+    google.protobuf.Timestamp answered_at = 8;  // When answer was provided
+    string answered_by = 9;              // Doctor who answered
+}
+
+// Doctor operations messages
+message PendingReviewsRequest {
+    string doctor_id = 1;               // Doctor UUID
+    PaginationParams pagination = 2;     // Pagination for reviews list
+    ReviewFilter filter = 3;            // Filter criteria
+}
+
+message ReviewFilter {
+    Department department = 1;          // Filter by department (e.g., DEPT_CARDIOLOGY)
+    QuestionType question_type = 2;     // Filter by question type
+    int32 min_urgency = 3;             // Minimum urgency level (1-5)
+    google.protobuf.Timestamp since = 4;// Start date for reviews
+    google.protobuf.Timestamp until = 5;// End date for reviews
+}
+
+message PendingReviewsResponse {
+    repeated PendingReview reviews = 1; // List of reviews needing attention
+    int32 total_count = 2;             // Total number of pending reviews
+}
+
+message PendingReview {
+    string question_id = 1;            // Question UUID
+    string patient_id = 2;             // Patient UUID
+    string question_text = 3;          // Original question
+    QuestionType question_type = 4;    // Question category
+    Department department = 5;         // Relevant department
+    int32 urgency_level = 6;          // Question urgency (1-5)
+    string ai_draft_answer = 7;        // AI-generated answer
+    float ai_confidence = 8;           // AI confidence score (0.0-1.0)
+    repeated string ai_references = 9; // References used by AI
+    google.protobuf.Timestamp created_at = 10;  // When question was submitted
+}
+
+message ReviewSubmissionRequest {
+    string question_id = 1;           // Question being reviewed
+    string doctor_id = 2;             // Reviewing doctor's UUID
+    ReviewDecision decision = 3;      // Review decision
+    string modified_answer = 4;       // Modified/new answer if needed
+    string review_comment = 5;        // Optional feedback/notes
+}
+
+enum ReviewDecision {
+    DECISION_UNSPECIFIED = 0;
+    DECISION_APPROVED = 1;    // AI answer can be sent as-is
+    DECISION_MODIFIED = 2;    // AI answer was edited
+    DECISION_REJECTED = 3;    // AI answer was inappropriate
+}
+
+message ReviewSubmissionResponse {
+    bool success = 1;                // Whether review was submitted successfully
+    string error_message = 2;        // Error details if submission failed
+    QuestionStatus new_status = 3;   // New status after review
+}

@@ -10,7 +10,7 @@ import (
 )
 
 type server struct {
-	pb.UnimplementedMedicalQAServiceServer
+	pb.UnimplementedMedicalServiceServer
 }
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	}
 
 	s := grpc.NewServer()
-	pb.RegisterMedicalQAServiceServer(s, &server{})
+	pb.RegisterMedicalServiceServer(s, &server{})
 
 	log.Printf("Backend server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
