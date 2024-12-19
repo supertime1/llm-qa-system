@@ -62,7 +62,7 @@ message PatientQuestionRequest {
 message PatientQuestionResponse {
     string question_id = 1;       // UUID of the created question
     QuestionStatus status = 2;    // Initial status (usually STATUS_PENDING)
-    google.protobuf.Timestamp estimated_completion_time = 3;  // When answer is expected
+    // google.protobuf.Timestamp estimated_completion_time = 3;  // When answer is expected
     string error_message = 4;     // Error details if submission failed
 }
 
