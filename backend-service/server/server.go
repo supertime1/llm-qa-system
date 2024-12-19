@@ -2,30 +2,24 @@ package server
 
 import (
 	"context"
-	"database/sql"
 
 	db "llm-qa-system/backend-service/src/db"
-	pb "llm-qa-system/backend-service/src/proto"
 
-	"google.golang.org/grpc"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Server struct {
-	pb.UnimplementedMedicalServiceServer
-	db        *db.Queries
-	llmClient pb.MedicalQAServiceClient
+type BaseServer struct {
+	db  *pgxpool.Pool
+	dbq *db.Queries
 }
 
-func NewServer(database *sql.DB, llmServiceAddr string) (*Server, error) {
-	// Connect to the database
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, llmServiceAddr, grpc.WithInsecure())
-	if err != nil {
-		return nil, err
+func NewBaseServer(pool *pgxpool.Pool) *BaseServer {
+	return &BaseServer{
+		db:  pool,
+		dbq: db.New(pool),
 	}
+}
 
-	return &Server{
-		db:        db.New(database),
-		llmClient: pb.NewMedicalQAServiceClient(conn),
-	}, nil
+func (s *BaseServer) Ping(ctx context.Context) error {
+	return s.db.Ping(ctx)
 }

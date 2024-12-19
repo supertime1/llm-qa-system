@@ -1,29 +1,58 @@
 package main
 
 import (
+	"context"
+	"llm-qa-system/backend-service/server"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
-	pb "llm-qa-system/backend-service/src/proto"
-
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 )
 
-type server struct {
-	pb.UnimplementedMedicalServiceServer
-}
-
 func main() {
-	lis, err := net.Listen("tcp", ":50052")
+	ctx := context.Background()
+
+	// Connect to database using pgx
+	dbpool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("Unable to connect to database: %v", err)
+	}
+	defer dbpool.Close()
+
+	// Create server group
+	serverGroup, err := server.NewServerGroup(dbpool, "localhost:50051")
+	if err != nil {
+		log.Fatalf("Failed to create server group: %v", err)
 	}
 
-	s := grpc.NewServer()
-	pb.RegisterMedicalServiceServer(s, &server{})
+	// Create gRPC server
+	grpcServer := grpc.NewServer()
+	serverGroup.Register(grpcServer)
 
-	log.Printf("Backend server listening at %v", lis.Addr())
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+	// Start listening
+	lis, err := net.Listen("tcp", ":50052")
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+
+	// Handle shutdown gracefully
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+
+		log.Println("Shutting down gracefully...")
+		serverGroup.Stop()
+		grpcServer.GracefulStop()
+	}()
+
+	// Start server
+	log.Printf("Server listening at %v", lis.Addr())
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
 	}
 }
