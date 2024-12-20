@@ -11,6 +11,90 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createBiometricData = `-- name: CreateBiometricData :one
+INSERT INTO biometric_data (
+    patient_id,
+    type,
+    value,
+    unit,
+    measured_at
+) VALUES (
+    $1, $2, $3, $4, $5
+) RETURNING id, patient_id, type, value, unit, measured_at, created_at
+`
+
+type CreateBiometricDataParams struct {
+	PatientID  pgtype.UUID        `json:"patient_id"`
+	Type       string             `json:"type"`
+	Value      string             `json:"value"`
+	Unit       string             `json:"unit"`
+	MeasuredAt pgtype.Timestamptz `json:"measured_at"`
+}
+
+// Biometric Data Operations
+func (q *Queries) CreateBiometricData(ctx context.Context, arg CreateBiometricDataParams) (BiometricDatum, error) {
+	row := q.db.QueryRow(ctx, createBiometricData,
+		arg.PatientID,
+		arg.Type,
+		arg.Value,
+		arg.Unit,
+		arg.MeasuredAt,
+	)
+	var i BiometricDatum
+	err := row.Scan(
+		&i.ID,
+		&i.PatientID,
+		&i.Type,
+		&i.Value,
+		&i.Unit,
+		&i.MeasuredAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createMedicalHistory = `-- name: CreateMedicalHistory :one
+INSERT INTO medical_history (
+    patient_id,
+    condition,
+    diagnosed_date,
+    status,
+    notes
+) VALUES (
+    $1, $2, $3, $4, $5
+) RETURNING id, patient_id, condition, diagnosed_date, status, notes, created_at
+`
+
+type CreateMedicalHistoryParams struct {
+	PatientID     pgtype.UUID        `json:"patient_id"`
+	Condition     string             `json:"condition"`
+	DiagnosedDate pgtype.Timestamptz `json:"diagnosed_date"`
+	Status        string             `json:"status"`
+	Notes         pgtype.Text        `json:"notes"`
+}
+
+// Medical History Operations
+func (q *Queries) CreateMedicalHistory(ctx context.Context, arg CreateMedicalHistoryParams) (MedicalHistory, error) {
+	row := q.db.QueryRow(ctx, createMedicalHistory,
+		arg.PatientID,
+		arg.Condition,
+		arg.DiagnosedDate,
+		arg.Status,
+		arg.Notes,
+	)
+	var i MedicalHistory
+	err := row.Scan(
+		&i.ID,
+		&i.PatientID,
+		&i.Condition,
+		&i.DiagnosedDate,
+		&i.Status,
+		&i.Notes,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createQuestion = `-- name: CreateQuestion :one
 INSERT INTO questions (
     patient_id,
@@ -55,6 +139,41 @@ func (q *Queries) CreateQuestion(ctx context.Context, arg CreateQuestionParams) 
 		&i.AnsweredBy,
 	)
 	return i, err
+}
+
+const getActiveMedicalConditions = `-- name: GetActiveMedicalConditions :many
+SELECT id, patient_id, condition, diagnosed_date, status, notes, created_at FROM medical_history
+WHERE patient_id = $1
+    AND status IN ('ACTIVE', 'CHRONIC')
+ORDER BY diagnosed_date DESC
+`
+
+func (q *Queries) GetActiveMedicalConditions(ctx context.Context, patientID pgtype.UUID) ([]MedicalHistory, error) {
+	rows, err := q.db.Query(ctx, getActiveMedicalConditions, patientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MedicalHistory{}
+	for rows.Next() {
+		var i MedicalHistory
+		if err := rows.Scan(
+			&i.ID,
+			&i.PatientID,
+			&i.Condition,
+			&i.DiagnosedDate,
+			&i.Status,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getAnswerHistory = `-- name: GetAnswerHistory :many
@@ -163,6 +282,192 @@ func (q *Queries) GetAnswerHistoryCount(ctx context.Context, arg GetAnswerHistor
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const getLatestBiometricsByType = `-- name: GetLatestBiometricsByType :many
+SELECT DISTINCT ON (type) id, patient_id, type, value, unit, measured_at, created_at
+FROM biometric_data
+WHERE patient_id = $1
+ORDER BY type, measured_at DESC
+`
+
+func (q *Queries) GetLatestBiometricsByType(ctx context.Context, patientID pgtype.UUID) ([]BiometricDatum, error) {
+	rows, err := q.db.Query(ctx, getLatestBiometricsByType, patientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BiometricDatum{}
+	for rows.Next() {
+		var i BiometricDatum
+		if err := rows.Scan(
+			&i.ID,
+			&i.PatientID,
+			&i.Type,
+			&i.Value,
+			&i.Unit,
+			&i.MeasuredAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPatientBiometricData = `-- name: GetPatientBiometricData :many
+SELECT id, patient_id, type, value, unit, measured_at, created_at FROM biometric_data
+WHERE patient_id = $1
+    AND ($2::varchar IS NULL OR type = $2)
+    AND ($3::timestamptz IS NULL OR measured_at >= $3)
+    AND ($4::timestamptz IS NULL OR measured_at <= $4)
+ORDER BY measured_at DESC
+LIMIT $5 OFFSET $6
+`
+
+type GetPatientBiometricDataParams struct {
+	PatientID pgtype.UUID        `json:"patient_id"`
+	Column2   string             `json:"column_2"`
+	Column3   pgtype.Timestamptz `json:"column_3"`
+	Column4   pgtype.Timestamptz `json:"column_4"`
+	Limit     int32              `json:"limit"`
+	Offset    int32              `json:"offset"`
+}
+
+func (q *Queries) GetPatientBiometricData(ctx context.Context, arg GetPatientBiometricDataParams) ([]BiometricDatum, error) {
+	rows, err := q.db.Query(ctx, getPatientBiometricData,
+		arg.PatientID,
+		arg.Column2,
+		arg.Column3,
+		arg.Column4,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BiometricDatum{}
+	for rows.Next() {
+		var i BiometricDatum
+		if err := rows.Scan(
+			&i.ID,
+			&i.PatientID,
+			&i.Type,
+			&i.Value,
+			&i.Unit,
+			&i.MeasuredAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPatientMedicalHistory = `-- name: GetPatientMedicalHistory :many
+SELECT id, patient_id, condition, diagnosed_date, status, notes, created_at FROM medical_history
+WHERE patient_id = $1
+    AND ($2::varchar IS NULL OR status = $2)
+ORDER BY diagnosed_date DESC
+LIMIT $3 OFFSET $4
+`
+
+type GetPatientMedicalHistoryParams struct {
+	PatientID pgtype.UUID `json:"patient_id"`
+	Column2   string      `json:"column_2"`
+	Limit     int32       `json:"limit"`
+	Offset    int32       `json:"offset"`
+}
+
+func (q *Queries) GetPatientMedicalHistory(ctx context.Context, arg GetPatientMedicalHistoryParams) ([]MedicalHistory, error) {
+	rows, err := q.db.Query(ctx, getPatientMedicalHistory,
+		arg.PatientID,
+		arg.Column2,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MedicalHistory{}
+	for rows.Next() {
+		var i MedicalHistory
+		if err := rows.Scan(
+			&i.ID,
+			&i.PatientID,
+			&i.Condition,
+			&i.DiagnosedDate,
+			&i.Status,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPatientWithContext = `-- name: GetPatientWithContext :one
+SELECT 
+    p.id, p.name, p.email, p.created_at, p.age, p.gender,
+    json_agg(DISTINCT jsonb_build_object(
+        'type', b.type,
+        'value', b.value,
+        'unit', b.unit,
+        'measured_at', b.measured_at
+    )) FILTER (WHERE b.id IS NOT NULL) as biometric_data,
+    json_agg(DISTINCT jsonb_build_object(
+        'condition', m.condition,
+        'status', m.status,
+        'diagnosed_date', m.diagnosed_date
+    )) FILTER (WHERE m.id IS NOT NULL) as medical_history
+FROM patients p
+LEFT JOIN biometric_data b ON b.patient_id = p.id
+LEFT JOIN medical_history m ON m.patient_id = p.id
+WHERE p.id = $1
+GROUP BY p.id
+`
+
+type GetPatientWithContextRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Email          string             `json:"email"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	Age            int32              `json:"age"`
+	Gender         string             `json:"gender"`
+	BiometricData  []byte             `json:"biometric_data"`
+	MedicalHistory []byte             `json:"medical_history"`
+}
+
+// Patient Context Operations
+func (q *Queries) GetPatientWithContext(ctx context.Context, id pgtype.UUID) (GetPatientWithContextRow, error) {
+	row := q.db.QueryRow(ctx, getPatientWithContext, id)
+	var i GetPatientWithContextRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.CreatedAt,
+		&i.Age,
+		&i.Gender,
+		&i.BiometricData,
+		&i.MedicalHistory,
+	)
+	return i, err
 }
 
 const getPendingReviews = `-- name: GetPendingReviews :many
@@ -434,4 +739,88 @@ func (q *Queries) SubmitReview(ctx context.Context, arg SubmitReviewParams) (Ans
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateMedicalHistoryStatus = `-- name: UpdateMedicalHistoryStatus :one
+UPDATE medical_history
+SET 
+    status = $3,
+    notes = COALESCE($4, notes)
+WHERE id = $1 AND patient_id = $2
+RETURNING id, patient_id, condition, diagnosed_date, status, notes, created_at
+`
+
+type UpdateMedicalHistoryStatusParams struct {
+	ID        pgtype.UUID `json:"id"`
+	PatientID pgtype.UUID `json:"patient_id"`
+	Status    string      `json:"status"`
+	Notes     pgtype.Text `json:"notes"`
+}
+
+func (q *Queries) UpdateMedicalHistoryStatus(ctx context.Context, arg UpdateMedicalHistoryStatusParams) (MedicalHistory, error) {
+	row := q.db.QueryRow(ctx, updateMedicalHistoryStatus,
+		arg.ID,
+		arg.PatientID,
+		arg.Status,
+		arg.Notes,
+	)
+	var i MedicalHistory
+	err := row.Scan(
+		&i.ID,
+		&i.PatientID,
+		&i.Condition,
+		&i.DiagnosedDate,
+		&i.Status,
+		&i.Notes,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updatePatientDemographics = `-- name: UpdatePatientDemographics :one
+UPDATE patients
+SET
+    age = $2,
+    gender = $3
+WHERE id = $1
+RETURNING id, name, email, created_at, age, gender
+`
+
+type UpdatePatientDemographicsParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Age    int32       `json:"age"`
+	Gender string      `json:"gender"`
+}
+
+// Patient Demographics Update
+func (q *Queries) UpdatePatientDemographics(ctx context.Context, arg UpdatePatientDemographicsParams) (Patient, error) {
+	row := q.db.QueryRow(ctx, updatePatientDemographics, arg.ID, arg.Age, arg.Gender)
+	var i Patient
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.CreatedAt,
+		&i.Age,
+		&i.Gender,
+	)
+	return i, err
+}
+
+const updateQuestionStatus = `-- name: UpdateQuestionStatus :exec
+UPDATE questions
+SET 
+    status = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type UpdateQuestionStatusParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+func (q *Queries) UpdateQuestionStatus(ctx context.Context, arg UpdateQuestionStatusParams) error {
+	_, err := q.db.Exec(ctx, updateQuestionStatus, arg.ID, arg.Status)
+	return err
 }

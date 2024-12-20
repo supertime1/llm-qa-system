@@ -22,6 +22,16 @@ type Answer struct {
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
+type BiometricDatum struct {
+	ID         pgtype.UUID        `json:"id"`
+	PatientID  pgtype.UUID        `json:"patient_id"`
+	Type       string             `json:"type"`
+	Value      string             `json:"value"`
+	Unit       string             `json:"unit"`
+	MeasuredAt pgtype.Timestamptz `json:"measured_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type Doctor struct {
 	ID         pgtype.UUID        `json:"id"`
 	Name       string             `json:"name"`
@@ -30,11 +40,23 @@ type Doctor struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type MedicalHistory struct {
+	ID            pgtype.UUID        `json:"id"`
+	PatientID     pgtype.UUID        `json:"patient_id"`
+	Condition     string             `json:"condition"`
+	DiagnosedDate pgtype.Timestamptz `json:"diagnosed_date"`
+	Status        string             `json:"status"`
+	Notes         pgtype.Text        `json:"notes"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type Patient struct {
 	ID        pgtype.UUID        `json:"id"`
 	Name      string             `json:"name"`
 	Email     string             `json:"email"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Age       int32              `json:"age"`
+	Gender    string             `json:"gender"`
 }
 
 type Question struct {

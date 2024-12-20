@@ -6,19 +6,35 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	// Biometric Data Operations
+	CreateBiometricData(ctx context.Context, arg CreateBiometricDataParams) (BiometricDatum, error)
+	// Medical History Operations
+	CreateMedicalHistory(ctx context.Context, arg CreateMedicalHistoryParams) (MedicalHistory, error)
 	// Patient operations
 	CreateQuestion(ctx context.Context, arg CreateQuestionParams) (Question, error)
+	GetActiveMedicalConditions(ctx context.Context, patientID pgtype.UUID) ([]MedicalHistory, error)
 	GetAnswerHistory(ctx context.Context, arg GetAnswerHistoryParams) ([]GetAnswerHistoryRow, error)
 	GetAnswerHistoryCount(ctx context.Context, arg GetAnswerHistoryCountParams) (int64, error)
+	GetLatestBiometricsByType(ctx context.Context, patientID pgtype.UUID) ([]BiometricDatum, error)
+	GetPatientBiometricData(ctx context.Context, arg GetPatientBiometricDataParams) ([]BiometricDatum, error)
+	GetPatientMedicalHistory(ctx context.Context, arg GetPatientMedicalHistoryParams) ([]MedicalHistory, error)
+	// Patient Context Operations
+	GetPatientWithContext(ctx context.Context, id pgtype.UUID) (GetPatientWithContextRow, error)
 	// Doctor operations
 	GetPendingReviews(ctx context.Context, arg GetPendingReviewsParams) ([]GetPendingReviewsRow, error)
 	GetPendingReviewsCount(ctx context.Context, arg GetPendingReviewsCountParams) (int64, error)
 	GetQuestionStatus(ctx context.Context, arg GetQuestionStatusParams) (GetQuestionStatusRow, error)
 	SaveAIDraftAnswer(ctx context.Context, arg SaveAIDraftAnswerParams) (Answer, error)
 	SubmitReview(ctx context.Context, arg SubmitReviewParams) (Answer, error)
+	UpdateMedicalHistoryStatus(ctx context.Context, arg UpdateMedicalHistoryStatusParams) (MedicalHistory, error)
+	// Patient Demographics Update
+	UpdatePatientDemographics(ctx context.Context, arg UpdatePatientDemographicsParams) (Patient, error)
+	UpdateQuestionStatus(ctx context.Context, arg UpdateQuestionStatusParams) error
 }
 
 var _ Querier = (*Queries)(nil)

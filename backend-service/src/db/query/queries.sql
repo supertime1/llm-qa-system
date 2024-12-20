@@ -114,3 +114,100 @@ INSERT INTO answers (
     $1, $2, $3, $4, 'DECISION_UNSPECIFIED'
 )
 RETURNING *;
+
+-- Patient Context Operations
+-- name: GetPatientWithContext :one
+SELECT 
+    p.*,
+    json_agg(DISTINCT jsonb_build_object(
+        'type', b.type,
+        'value', b.value,
+        'unit', b.unit,
+        'measured_at', b.measured_at
+    )) FILTER (WHERE b.id IS NOT NULL) as biometric_data,
+    json_agg(DISTINCT jsonb_build_object(
+        'condition', m.condition,
+        'status', m.status,
+        'diagnosed_date', m.diagnosed_date
+    )) FILTER (WHERE m.id IS NOT NULL) as medical_history
+FROM patients p
+LEFT JOIN biometric_data b ON b.patient_id = p.id
+LEFT JOIN medical_history m ON m.patient_id = p.id
+WHERE p.id = $1
+GROUP BY p.id;
+
+-- Biometric Data Operations
+-- name: CreateBiometricData :one
+INSERT INTO biometric_data (
+    patient_id,
+    type,
+    value,
+    unit,
+    measured_at
+) VALUES (
+    $1, $2, $3, $4, $5
+) RETURNING *;
+
+-- name: GetPatientBiometricData :many
+SELECT * FROM biometric_data
+WHERE patient_id = $1
+    AND ($2::varchar IS NULL OR type = $2)
+    AND ($3::timestamptz IS NULL OR measured_at >= $3)
+    AND ($4::timestamptz IS NULL OR measured_at <= $4)
+ORDER BY measured_at DESC
+LIMIT $5 OFFSET $6;
+
+-- name: GetLatestBiometricsByType :many
+SELECT DISTINCT ON (type) *
+FROM biometric_data
+WHERE patient_id = $1
+ORDER BY type, measured_at DESC;
+
+-- Medical History Operations
+-- name: CreateMedicalHistory :one
+INSERT INTO medical_history (
+    patient_id,
+    condition,
+    diagnosed_date,
+    status,
+    notes
+) VALUES (
+    $1, $2, $3, $4, $5
+) RETURNING *;
+
+-- name: GetPatientMedicalHistory :many
+SELECT * FROM medical_history
+WHERE patient_id = $1
+    AND ($2::varchar IS NULL OR status = $2)
+ORDER BY diagnosed_date DESC
+LIMIT $3 OFFSET $4;
+
+-- name: UpdateMedicalHistoryStatus :one
+UPDATE medical_history
+SET 
+    status = $3,
+    notes = COALESCE($4, notes)
+WHERE id = $1 AND patient_id = $2
+RETURNING *;
+
+-- name: GetActiveMedicalConditions :many
+SELECT * FROM medical_history
+WHERE patient_id = $1
+    AND status IN ('ACTIVE', 'CHRONIC')
+ORDER BY diagnosed_date DESC;
+
+-- Patient Demographics Update
+-- name: UpdatePatientDemographics :one
+UPDATE patients
+SET
+    age = $2,
+    gender = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateQuestionStatus :exec
+UPDATE questions
+SET 
+    status = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1;
