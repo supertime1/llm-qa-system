@@ -6,6 +6,16 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/supertime1/llm-qa-system/backend-service/src/proto";
 
+message UUID {
+    bytes value = 1;
+}
+
+// Main QA service definition
+service MedicalQAService {
+    // Generate a draft answer for medical questions
+    rpc GenerateDraftAnswer (QuestionRequest) returns (QuestionResponse) {}
+}
+
 // Backend Medical Service
 service MedicalService {
     // Patient operations
@@ -16,6 +26,44 @@ service MedicalService {
     // Doctor operations
     rpc GetPendingReviews(PendingReviewsRequest) returns (PendingReviewsResponse) {}
     rpc SubmitReview(ReviewSubmissionRequest) returns (ReviewSubmissionResponse) {}
+}
+
+
+message QuestionRequest {
+    UUID question_id = 1;
+    string question_text = 2;
+    UserContext user_context = 3;
+}
+
+message UserContext {
+    UserInfo user_info = 1;
+    repeated BiometricData biometric_data = 2;
+    repeated ChatMessage chat_history = 3;
+}
+
+message UserInfo {
+    string age = 1;
+    string gender = 2;
+    repeated string medical_history = 3;
+}
+
+message BiometricData {
+    string type = 1;
+    string value = 2;
+    google.protobuf.Timestamp timestamp = 3;
+}
+
+message ChatMessage {
+    string role = 1;
+    string content = 2;
+    google.protobuf.Timestamp timestamp = 3;
+}
+
+message QuestionResponse {
+    UUID question_id = 1;
+    string draft_answer = 2;
+    repeated string references = 3;
+    float confidence_score = 4;
 }
 
 // Common types
@@ -52,7 +100,7 @@ message PaginationParams {
 
 // Patient operations messages
 message PatientQuestionRequest {
-    string patient_id = 1;        // UUID of the patient
+    UUID patient_id = 1;        // UUID of the patient
     string question_text = 2;     // The actual question (e.g., "What are the side effects of aspirin?")
     QuestionType question_type = 3;// Category of question (e.g., TYPE_MEDICATION)
     Department department = 4;     // Relevant department (e.g., DEPT_CARDIOLOGY)
@@ -60,28 +108,28 @@ message PatientQuestionRequest {
 }
 
 message PatientQuestionResponse {
-    string question_id = 1;       // UUID of the created question
+    UUID question_id = 1;       // UUID of the created question
     QuestionStatus status = 2;    // Initial status (usually STATUS_PENDING)
     // google.protobuf.Timestamp estimated_completion_time = 3;  // When answer is expected
     string error_message = 4;     // Error details if submission failed
 }
 
 message QuestionStatusRequest {
-    string question_id = 1;       // UUID of the question to check
-    string patient_id = 2;        // Patient UUID for authorization
+    UUID question_id = 1;       // UUID of the question to check
+    UUID patient_id = 2;        // Patient UUID for authorization
 }
 
 message QuestionStatusResponse {
-    string question_id = 1;           // Question UUID
+    UUID question_id = 1;           // Question UUID
     QuestionStatus status = 2;        // Current status
     string answer = 3;               // Answer text (if status is ANSWERED)
     google.protobuf.Timestamp answered_at = 4;  // When the answer was provided
-    string answered_by = 5;          // Doctor's ID or name who reviewed
+    UUID answered_by = 5;          // Doctor's ID or name who reviewed
     string error_message = 6;        // Any error information
 }
 
 message AnswerHistoryRequest {
-    string patient_id = 1;           // Patient UUID
+    UUID patient_id = 1;           // Patient UUID
     PaginationParams pagination = 2;  // e.g., {limit: 10, offset: 0} for first page
     QuestionStatus status_filter = 3; // Filter by status (e.g., only ANSWERED)
     google.protobuf.Timestamp date_from = 4;  // Start date for history
@@ -94,7 +142,7 @@ message AnswerHistoryResponse {
 }
 
 message QuestionAnswer {
-    string question_id = 1;              // Question UUID
+    UUID question_id = 1;              // Question UUID
     string question_text = 2;            // Original question
     QuestionType question_type = 3;      // Question category
     Department department = 4;           // Relevant department
@@ -102,12 +150,12 @@ message QuestionAnswer {
     QuestionStatus status = 6;           // Current status
     google.protobuf.Timestamp created_at = 7;   // When question was asked
     google.protobuf.Timestamp answered_at = 8;  // When answer was provided
-    string answered_by = 9;              // Doctor who answered
+    UUID answered_by = 9;              // Doctor who answered
 }
 
 // Doctor operations messages
 message PendingReviewsRequest {
-    string doctor_id = 1;               // Doctor UUID
+    UUID doctor_id = 1;               // Doctor UUID
     PaginationParams pagination = 2;     // Pagination for reviews list
     ReviewFilter filter = 3;            // Filter criteria
 }
@@ -126,8 +174,8 @@ message PendingReviewsResponse {
 }
 
 message PendingReview {
-    string question_id = 1;            // Question UUID
-    string patient_id = 2;             // Patient UUID
+    UUID question_id = 1;            // Question UUID
+    UUID patient_id = 2;             // Patient UUID
     string question_text = 3;          // Original question
     QuestionType question_type = 4;    // Question category
     Department department = 5;         // Relevant department
@@ -139,8 +187,8 @@ message PendingReview {
 }
 
 message ReviewSubmissionRequest {
-    string question_id = 1;           // Question being reviewed
-    string doctor_id = 2;             // Reviewing doctor's UUID
+    UUID question_id = 1;           // Question being reviewed
+    UUID doctor_id = 2;             // Reviewing doctor's UUID
     ReviewDecision decision = 3;      // Review decision
     string modified_answer = 4;       // Modified/new answer if needed
     string review_comment = 5;        // Optional feedback/notes

@@ -36,13 +36,13 @@ func NewMedicalServer(pool *pgxpool.Pool, llmServiceAddr string) (*MedicalServer
 // SubmitQuestion handles the initial question submission from a patient
 func (s *MedicalServer) SubmitQuestion(ctx context.Context, req *pb.PatientQuestionRequest) (*pb.PatientQuestionResponse, error) {
 	// Create question in database
-	patientUUID, err := uuid.Parse(req.PatientId)
+	patientUUID, err := req.PatientId
 	if err != nil {
 		return nil, fmt.Errorf("invalid patient ID: %v", err)
 	}
 
 	question, err := s.dbq.CreateQuestion(ctx, db.CreateQuestionParams{
-		PatientID:    pgtype.UUID{Bytes: patientUUID[:], Valid: true},
+		PatientID:    pgtype.UUID{Bytes: req.PatientId[:], Valid: true},
 		QuestionText: req.QuestionText,
 		QuestionType: req.QuestionType.String(),
 		Department:   req.Department.String(),
@@ -64,6 +64,7 @@ func (s *MedicalServer) SubmitQuestion(ctx context.Context, req *pb.PatientQuest
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert UUID: %v", err)
 	}
+
 	// Send to LLM service for draft answer
 	llmResp, err := s.llmClient.GenerateDraftAnswer(ctx, &pb.QuestionRequest{
 		QuestionId:   questionUUID.String(),
