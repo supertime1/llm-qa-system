@@ -139,7 +139,6 @@ func main() {
 			switch parts[1] {
 			case "approve":
 				status = pb.ReviewStatus_APPROVED
-				content = "This is a simulated AI response approved by the doctor."
 			case "reject":
 				status = pb.ReviewStatus_REJECTED
 			case "modify":

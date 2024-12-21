@@ -106,7 +106,7 @@ func (s *ChatServer) handleMessage(ctx context.Context, req *pb.ChatRequest, str
 		})
 
 		// Hardcoded AI response for now
-		aiResponse := "This is a simulated AI response to your question. The doctor will review this shortly."
+		aiResponse := "This is a simulated AI response to patient's question.."
 
 		// Send AI draft only to doctor
 		chatKey := fmt.Sprintf("%x", req.ChatId.Value)
