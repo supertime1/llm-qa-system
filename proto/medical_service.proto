@@ -10,22 +10,84 @@ message UUID {
     bytes value = 1;
 }
 
+// Main Chat Service
+service MedicalChatService {
+    // Bidirectional streaming for real-time chat
+    rpc ChatStream(stream ChatRequest) returns (stream ChatResponse) {}
+}
+
 // Main QA service definition
 service MedicalQAService {
     // Generate a draft answer for medical questions
     rpc GenerateDraftAnswer (QuestionRequest) returns (QuestionResponse) {}
 }
 
-// Backend Medical Service
-service MedicalService {
-    // Patient operations
-    rpc SubmitQuestion(PatientQuestionRequest) returns (PatientQuestionResponse) {}
-    rpc GetQuestionStatus(QuestionStatusRequest) returns (QuestionStatusResponse) {}
-    rpc GetAnswerHistory(AnswerHistoryRequest) returns (AnswerHistoryResponse) {}
+// Request from client (patient/doctor)
+message ChatRequest {
+    UUID chat_id = 1;          // UUID of the chat session
+    UUID sender_id = 2;        // UUID of sender (patient/doctor)
+    string content = 3;          // Message content
+    Role role = 4;              // Role of sender
+    RequestType type = 5;        // Type of request
+}
 
-    // Doctor operations
-    rpc GetPendingReviews(PendingReviewsRequest) returns (PendingReviewsResponse) {}
-    rpc SubmitReview(ReviewSubmissionRequest) returns (ReviewSubmissionResponse) {}
+// Response to clients
+message ChatResponse {
+    UUID chat_id = 1;
+    ResponseType type = 2;       // Type of response
+    oneof payload {
+        Message message = 3;     // Regular chat message
+        AIDraft ai_draft = 4;    // AI generated draft
+        ReviewUpdate review = 5; // Doctor review status
+    }
+    google.protobuf.Timestamp timestamp = 6;
+}
+
+message Message {
+    UUID sender_id = 1;
+    string content = 2;
+    Role role = 3;
+}
+
+message AIDraft {
+    string content = 1;
+    float confidence_score = 2;
+}
+
+message ReviewUpdate {
+    ReviewStatus status = 1;
+    string modified_content = 2;  // If doctor modifies the answer
+}
+
+enum Role {
+    ROLE_UNKNOWN = 0;
+    ROLE_PATIENT = 1;
+    ROLE_DOCTOR = 2;
+    ROLE_SYSTEM = 3;
+}
+
+enum RequestType {
+    REQUEST_UNKNOWN = 0;
+    SEND_MESSAGE = 1;      // Regular chat message
+    START_CHAT = 2;        // Start new chat session
+    JOIN_CHAT = 3;        // Doctor joining chat
+    SUBMIT_REVIEW = 4;    // Doctor submitting review
+}
+
+enum ResponseType {
+    RESPONSE_UNKNOWN = 0;
+    NEW_MESSAGE = 1;      // New chat message
+    AI_DRAFT_READY = 2;   // AI draft is ready
+    DOCTOR_REVIEWING = 3; // Doctor is reviewing
+    REVIEW_DONE = 4;      // Final answer ready
+    ERROR = 5;           // Error occurred
+}
+
+enum ReviewStatus {
+    REVIEW_UNKNOWN = 0;
+    APPROVED = 1;        // AI draft approved as-is
+    MODIFIED = 2;        // AI draft modified
+    REJECTED = 3;        // AI draft rejected with new answer
 }
 
 
@@ -66,143 +128,3 @@ message QuestionResponse {
     float confidence_score = 4;
 }
 
-// Common types
-enum QuestionType {
-    TYPE_UNSPECIFIED = 0;    // Default value when type is not specified
-    TYPE_GENERAL = 1;        // e.g., "What are the symptoms of flu?"
-    TYPE_MEDICATION = 2;     // e.g., "Can I take ibuprofen with my current medications?"
-    TYPE_DIAGNOSIS = 3;      // e.g., "What could these symptoms indicate?"
-    TYPE_FOLLOW_UP = 4;      // e.g., "How should I monitor my condition after treatment?"
-}
-
-enum QuestionStatus {
-    STATUS_UNSPECIFIED = 0;
-    STATUS_PENDING = 1;           // Question just submitted
-    STATUS_PROCESSING = 2;        // AI is generating answer
-    STATUS_PENDING_REVIEW = 3;    // AI finished, waiting for doctor
-    STATUS_UNDER_REVIEW = 4;      // Doctor currently reviewing
-    STATUS_ANSWERED = 5;          // Final answer available to patient
-    STATUS_REJECTED = 6;          // Question rejected (inappropriate/unclear)
-}
-
-enum Department {
-    DEPT_UNSPECIFIED = 0;
-    DEPT_GENERAL_MEDICINE = 1;    // General health questions
-    DEPT_CARDIOLOGY = 2;         // Heart-related questions
-    DEPT_PEDIATRICS = 3;         // Child health questions
-    DEPT_DERMATOLOGY = 4;        // Skin-related questions
-}
-
-message PaginationParams {
-    int32 limit = 1;     // Number of items per page (e.g., 10)
-    int32 offset = 2;    // Starting position (e.g., 0 for first page, 10 for second page)
-}
-
-// Patient operations messages
-message PatientQuestionRequest {
-    UUID patient_id = 1;        // UUID of the patient
-    string question_text = 2;     // The actual question (e.g., "What are the side effects of aspirin?")
-    QuestionType question_type = 3;// Category of question (e.g., TYPE_MEDICATION)
-    Department department = 4;     // Relevant department (e.g., DEPT_CARDIOLOGY)
-    int32 urgency_level = 5;      // 1-5 scale (1=routine, 5=urgent)
-}
-
-message PatientQuestionResponse {
-    UUID question_id = 1;       // UUID of the created question
-    QuestionStatus status = 2;    // Initial status (usually STATUS_PENDING)
-    // google.protobuf.Timestamp estimated_completion_time = 3;  // When answer is expected
-    string error_message = 4;     // Error details if submission failed
-}
-
-message QuestionStatusRequest {
-    UUID question_id = 1;       // UUID of the question to check
-    UUID patient_id = 2;        // Patient UUID for authorization
-}
-
-message QuestionStatusResponse {
-    UUID question_id = 1;           // Question UUID
-    QuestionStatus status = 2;        // Current status
-    string answer = 3;               // Answer text (if status is ANSWERED)
-    google.protobuf.Timestamp answered_at = 4;  // When the answer was provided
-    UUID answered_by = 5;          // Doctor's ID or name who reviewed
-    string error_message = 6;        // Any error information
-}
-
-message AnswerHistoryRequest {
-    UUID patient_id = 1;           // Patient UUID
-    PaginationParams pagination = 2;  // e.g., {limit: 10, offset: 0} for first page
-    QuestionStatus status_filter = 3; // Filter by status (e.g., only ANSWERED)
-    google.protobuf.Timestamp date_from = 4;  // Start date for history
-    google.protobuf.Timestamp date_to = 5;    // End date for history
-}
-
-message AnswerHistoryResponse {
-    repeated QuestionAnswer answers = 1;  // List of answers
-    int32 total_count = 2;               // Total number of answers (for pagination)
-}
-
-message QuestionAnswer {
-    UUID question_id = 1;              // Question UUID
-    string question_text = 2;            // Original question
-    QuestionType question_type = 3;      // Question category
-    Department department = 4;           // Relevant department
-    string answer = 5;                  // Answer text
-    QuestionStatus status = 6;           // Current status
-    google.protobuf.Timestamp created_at = 7;   // When question was asked
-    google.protobuf.Timestamp answered_at = 8;  // When answer was provided
-    UUID answered_by = 9;              // Doctor who answered
-}
-
-// Doctor operations messages
-message PendingReviewsRequest {
-    UUID doctor_id = 1;               // Doctor UUID
-    PaginationParams pagination = 2;     // Pagination for reviews list
-    ReviewFilter filter = 3;            // Filter criteria
-}
-
-message ReviewFilter {
-    Department department = 1;          // Filter by department (e.g., DEPT_CARDIOLOGY)
-    QuestionType question_type = 2;     // Filter by question type
-    int32 min_urgency = 3;             // Minimum urgency level (1-5)
-    google.protobuf.Timestamp since = 4;// Start date for reviews
-    google.protobuf.Timestamp until = 5;// End date for reviews
-}
-
-message PendingReviewsResponse {
-    repeated PendingReview reviews = 1; // List of reviews needing attention
-    int32 total_count = 2;             // Total number of pending reviews
-}
-
-message PendingReview {
-    UUID question_id = 1;            // Question UUID
-    UUID patient_id = 2;             // Patient UUID
-    string question_text = 3;          // Original question
-    QuestionType question_type = 4;    // Question category
-    Department department = 5;         // Relevant department
-    int32 urgency_level = 6;          // Question urgency (1-5)
-    string ai_draft_answer = 7;        // AI-generated answer
-    float ai_confidence = 8;           // AI confidence score (0.0-1.0)
-    repeated string ai_references = 9; // References used by AI
-    google.protobuf.Timestamp created_at = 10;  // When question was submitted
-}
-
-message ReviewSubmissionRequest {
-    UUID question_id = 1;           // Question being reviewed
-    UUID doctor_id = 2;             // Reviewing doctor's UUID
-    ReviewDecision decision = 3;      // Review decision
-    string modified_answer = 4;       // Modified/new answer if needed
-    string review_comment = 5;        // Optional feedback/notes
-}
-
-enum ReviewDecision {
-    DECISION_UNSPECIFIED = 0;
-    DECISION_APPROVED = 1;    // AI answer can be sent as-is
-    DECISION_MODIFIED = 2;    // AI answer was edited
-    DECISION_REJECTED = 3;    // AI answer was inappropriate
-}
-
-message ReviewSubmissionResponse {
-    bool success = 1;                // Whether review was submitted successfully
-    string error_message = 2;        // Error details if submission failed
-    QuestionStatus new_status = 3;   // New status after review
-}

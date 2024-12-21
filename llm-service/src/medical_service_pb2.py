@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x15medical_service.proto\x12\x07\x62\x61\x63kend\x1a\x1fgoogle/protobuf/timestamp.proto\"\x15\n\x04UUID\x12\r\n\x05value\x18\x01 \x01(\x0c\"x\n\x0fQuestionRequest\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12*\n\x0cuser_context\x18\x03 \x01(\x0b\x32\x14.backend.UserContext\"\x8f\x01\n\x0bUserContext\x12$\n\tuser_info\x18\x01 \x01(\x0b\x32\x11.backend.UserInfo\x12.\n\x0e\x62iometric_data\x18\x02 \x03(\x0b\x32\x16.backend.BiometricData\x12*\n\x0c\x63hat_history\x18\x03 \x03(\x0b\x32\x14.backend.ChatMessage\"@\n\x08UserInfo\x12\x0b\n\x03\x61ge\x18\x01 \x01(\t\x12\x0e\n\x06gender\x18\x02 \x01(\t\x12\x17\n\x0fmedical_history\x18\x03 \x03(\t\"[\n\rBiometricData\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"[\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"z\n\x10QuestionResponse\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x12\n\nreferences\x18\x03 \x03(\t\x12\x18\n\x10\x63onfidence_score\x18\x04 \x01(\x02\"1\n\x10PaginationParams\x12\r\n\x05limit\x18\x01 \x01(\x05\x12\x0e\n\x06offset\x18\x02 \x01(\x05\"\xc0\x01\n\x16PatientQuestionRequest\x12!\n\npatient_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12,\n\rquestion_type\x18\x03 \x01(\x0e\x32\x15.backend.QuestionType\x12\'\n\ndepartment\x18\x04 \x01(\x0e\x32\x13.backend.Department\x12\x15\n\rurgency_level\x18\x05 \x01(\x05\"}\n\x17PatientQuestionResponse\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\'\n\x06status\x18\x02 \x01(\x0e\x32\x17.backend.QuestionStatus\x12\x15\n\rerror_message\x18\x04 \x01(\t\"^\n\x15QuestionStatusRequest\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12!\n\npatient_id\x18\x02 \x01(\x0b\x32\r.backend.UUID\"\xe1\x01\n\x16QuestionStatusResponse\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\'\n\x06status\x18\x02 \x01(\x0e\x32\x17.backend.QuestionStatus\x12\x0e\n\x06\x61nswer\x18\x03 \x01(\t\x12/\n\x0b\x61nswered_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\"\n\x0b\x61nswered_by\x18\x05 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rerror_message\x18\x06 \x01(\t\"\xf4\x01\n\x14\x41nswerHistoryRequest\x12!\n\npatient_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12-\n\npagination\x18\x02 \x01(\x0b\x32\x19.backend.PaginationParams\x12.\n\rstatus_filter\x18\x03 \x01(\x0e\x32\x17.backend.QuestionStatus\x12-\n\tdate_from\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12+\n\x07\x64\x61te_to\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"V\n\x15\x41nswerHistoryResponse\x12(\n\x07\x61nswers\x18\x01 \x03(\x0b\x32\x17.backend.QuestionAnswer\x12\x13\n\x0btotal_count\x18\x02 \x01(\x05\"\xe0\x02\n\x0eQuestionAnswer\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12,\n\rquestion_type\x18\x03 \x01(\x0e\x32\x15.backend.QuestionType\x12\'\n\ndepartment\x18\x04 \x01(\x0e\x32\x13.backend.Department\x12\x0e\n\x06\x61nswer\x18\x05 \x01(\t\x12\'\n\x06status\x18\x06 \x01(\x0e\x32\x17.backend.QuestionStatus\x12.\n\ncreated_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0b\x61nswered_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\"\n\x0b\x61nswered_by\x18\t \x01(\x0b\x32\r.backend.UUID\"\x8f\x01\n\x15PendingReviewsRequest\x12 \n\tdoctor_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12-\n\npagination\x18\x02 \x01(\x0b\x32\x19.backend.PaginationParams\x12%\n\x06\x66ilter\x18\x03 \x01(\x0b\x32\x15.backend.ReviewFilter\"\xd0\x01\n\x0cReviewFilter\x12\'\n\ndepartment\x18\x01 \x01(\x0e\x32\x13.backend.Department\x12,\n\rquestion_type\x18\x02 \x01(\x0e\x32\x15.backend.QuestionType\x12\x13\n\x0bmin_urgency\x18\x03 \x01(\x05\x12)\n\x05since\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12)\n\x05until\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"V\n\x16PendingReviewsResponse\x12\'\n\x07reviews\x18\x01 \x03(\x0b\x32\x16.backend.PendingReview\x12\x13\n\x0btotal_count\x18\x02 \x01(\x05\"\xd2\x02\n\rPendingReview\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12!\n\npatient_id\x18\x02 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x03 \x01(\t\x12,\n\rquestion_type\x18\x04 \x01(\x0e\x32\x15.backend.QuestionType\x12\'\n\ndepartment\x18\x05 \x01(\x0e\x32\x13.backend.Department\x12\x15\n\rurgency_level\x18\x06 \x01(\x05\x12\x17\n\x0f\x61i_draft_answer\x18\x07 \x01(\t\x12\x15\n\rai_confidence\x18\x08 \x01(\x02\x12\x15\n\rai_references\x18\t \x03(\t\x12.\n\ncreated_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xbb\x01\n\x17ReviewSubmissionRequest\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12 \n\tdoctor_id\x18\x02 \x01(\x0b\x32\r.backend.UUID\x12)\n\x08\x64\x65\x63ision\x18\x03 \x01(\x0e\x32\x17.backend.ReviewDecision\x12\x17\n\x0fmodified_answer\x18\x04 \x01(\t\x12\x16\n\x0ereview_comment\x18\x05 \x01(\t\"o\n\x18ReviewSubmissionResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12+\n\nnew_status\x18\x03 \x01(\x0e\x32\x17.backend.QuestionStatus*s\n\x0cQuestionType\x12\x14\n\x10TYPE_UNSPECIFIED\x10\x00\x12\x10\n\x0cTYPE_GENERAL\x10\x01\x12\x13\n\x0fTYPE_MEDICATION\x10\x02\x12\x12\n\x0eTYPE_DIAGNOSIS\x10\x03\x12\x12\n\x0eTYPE_FOLLOW_UP\x10\x04*\xb1\x01\n\x0eQuestionStatus\x12\x16\n\x12STATUS_UNSPECIFIED\x10\x00\x12\x12\n\x0eSTATUS_PENDING\x10\x01\x12\x15\n\x11STATUS_PROCESSING\x10\x02\x12\x19\n\x15STATUS_PENDING_REVIEW\x10\x03\x12\x17\n\x13STATUS_UNDER_REVIEW\x10\x04\x12\x13\n\x0fSTATUS_ANSWERED\x10\x05\x12\x13\n\x0fSTATUS_REJECTED\x10\x06*}\n\nDepartment\x12\x14\n\x10\x44\x45PT_UNSPECIFIED\x10\x00\x12\x19\n\x15\x44\x45PT_GENERAL_MEDICINE\x10\x01\x12\x13\n\x0f\x44\x45PT_CARDIOLOGY\x10\x02\x12\x13\n\x0f\x44\x45PT_PEDIATRICS\x10\x03\x12\x14\n\x10\x44\x45PT_DERMATOLOGY\x10\x04*o\n\x0eReviewDecision\x12\x18\n\x14\x44\x45\x43ISION_UNSPECIFIED\x10\x00\x12\x15\n\x11\x44\x45\x43ISION_APPROVED\x10\x01\x12\x15\n\x11\x44\x45\x43ISION_MODIFIED\x10\x02\x12\x15\n\x11\x44\x45\x43ISION_REJECTED\x10\x03\x32`\n\x10MedicalQAService\x12L\n\x13GenerateDraftAnswer\x12\x18.backend.QuestionRequest\x1a\x19.backend.QuestionResponse\"\x00\x32\xc3\x03\n\x0eMedicalService\x12U\n\x0eSubmitQuestion\x12\x1f.backend.PatientQuestionRequest\x1a .backend.PatientQuestionResponse\"\x00\x12V\n\x11GetQuestionStatus\x12\x1e.backend.QuestionStatusRequest\x1a\x1f.backend.QuestionStatusResponse\"\x00\x12S\n\x10GetAnswerHistory\x12\x1d.backend.AnswerHistoryRequest\x1a\x1e.backend.AnswerHistoryResponse\"\x00\x12V\n\x11GetPendingReviews\x12\x1e.backend.PendingReviewsRequest\x1a\x1f.backend.PendingReviewsResponse\"\x00\x12U\n\x0cSubmitReview\x12 .backend.ReviewSubmissionRequest\x1a!.backend.ReviewSubmissionResponse\"\x00\x42?Z=github.com/supertime1/llm-qa-system/backend-service/src/protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x15medical_service.proto\x12\x07\x62\x61\x63kend\x1a\x1fgoogle/protobuf/timestamp.proto\"\x15\n\x04UUID\x12\r\n\x05value\x18\x01 \x01(\x0c\"\xa1\x01\n\x0b\x43hatRequest\x12\x1e\n\x07\x63hat_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12 \n\tsender_id\x18\x02 \x01(\x0b\x32\r.backend.UUID\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x1b\n\x04role\x18\x04 \x01(\x0e\x32\r.backend.Role\x12\"\n\x04type\x18\x05 \x01(\x0e\x32\x14.backend.RequestType\"\x81\x02\n\x0c\x43hatResponse\x12\x1e\n\x07\x63hat_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12#\n\x04type\x18\x02 \x01(\x0e\x32\x15.backend.ResponseType\x12#\n\x07message\x18\x03 \x01(\x0b\x32\x10.backend.MessageH\x00\x12$\n\x08\x61i_draft\x18\x04 \x01(\x0b\x32\x10.backend.AIDraftH\x00\x12\'\n\x06review\x18\x05 \x01(\x0b\x32\x15.backend.ReviewUpdateH\x00\x12-\n\ttimestamp\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\t\n\x07payload\"Y\n\x07Message\x12 \n\tsender_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x1b\n\x04role\x18\x03 \x01(\x0e\x32\r.backend.Role\"4\n\x07\x41IDraft\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x18\n\x10\x63onfidence_score\x18\x02 \x01(\x02\"O\n\x0cReviewUpdate\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.backend.ReviewStatus\x12\x18\n\x10modified_content\x18\x02 \x01(\t\"x\n\x0fQuestionRequest\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12*\n\x0cuser_context\x18\x03 \x01(\x0b\x32\x14.backend.UserContext\"\x8f\x01\n\x0bUserContext\x12$\n\tuser_info\x18\x01 \x01(\x0b\x32\x11.backend.UserInfo\x12.\n\x0e\x62iometric_data\x18\x02 \x03(\x0b\x32\x16.backend.BiometricData\x12*\n\x0c\x63hat_history\x18\x03 \x03(\x0b\x32\x14.backend.ChatMessage\"@\n\x08UserInfo\x12\x0b\n\x03\x61ge\x18\x01 \x01(\t\x12\x0e\n\x06gender\x18\x02 \x01(\t\x12\x17\n\x0fmedical_history\x18\x03 \x03(\t\"[\n\rBiometricData\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"[\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"z\n\x10QuestionResponse\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x12\n\nreferences\x18\x03 \x03(\t\x12\x18\n\x10\x63onfidence_score\x18\x04 \x01(\x02*L\n\x04Role\x12\x10\n\x0cROLE_UNKNOWN\x10\x00\x12\x10\n\x0cROLE_PATIENT\x10\x01\x12\x0f\n\x0bROLE_DOCTOR\x10\x02\x12\x0f\n\x0bROLE_SYSTEM\x10\x03*f\n\x0bRequestType\x12\x13\n\x0fREQUEST_UNKNOWN\x10\x00\x12\x10\n\x0cSEND_MESSAGE\x10\x01\x12\x0e\n\nSTART_CHAT\x10\x02\x12\r\n\tJOIN_CHAT\x10\x03\x12\x11\n\rSUBMIT_REVIEW\x10\x04*{\n\x0cResponseType\x12\x14\n\x10RESPONSE_UNKNOWN\x10\x00\x12\x0f\n\x0bNEW_MESSAGE\x10\x01\x12\x12\n\x0e\x41I_DRAFT_READY\x10\x02\x12\x14\n\x10\x44OCTOR_REVIEWING\x10\x03\x12\x0f\n\x0bREVIEW_DONE\x10\x04\x12\t\n\x05\x45RROR\x10\x05*L\n\x0cReviewStatus\x12\x12\n\x0eREVIEW_UNKNOWN\x10\x00\x12\x0c\n\x08\x41PPROVED\x10\x01\x12\x0c\n\x08MODIFIED\x10\x02\x12\x0c\n\x08REJECTED\x10\x03\x32U\n\x12MedicalChatService\x12?\n\nChatStream\x12\x14.backend.ChatRequest\x1a\x15.backend.ChatResponse\"\x00(\x01\x30\x01\x32`\n\x10MedicalQAService\x12L\n\x13GenerateDraftAnswer\x12\x18.backend.QuestionRequest\x1a\x19.backend.QuestionResponse\"\x00\x42?Z=github.com/supertime1/llm-qa-system/backend-service/src/protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -22,58 +22,40 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'medical_service_pb2', _glob
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
   DESCRIPTOR._serialized_options = b'Z=github.com/supertime1/llm-qa-system/backend-service/src/proto'
-  _globals['_QUESTIONTYPE']._serialized_start=3210
-  _globals['_QUESTIONTYPE']._serialized_end=3325
-  _globals['_QUESTIONSTATUS']._serialized_start=3328
-  _globals['_QUESTIONSTATUS']._serialized_end=3505
-  _globals['_DEPARTMENT']._serialized_start=3507
-  _globals['_DEPARTMENT']._serialized_end=3632
-  _globals['_REVIEWDECISION']._serialized_start=3634
-  _globals['_REVIEWDECISION']._serialized_end=3745
+  _globals['_ROLE']._serialized_start=1384
+  _globals['_ROLE']._serialized_end=1460
+  _globals['_REQUESTTYPE']._serialized_start=1462
+  _globals['_REQUESTTYPE']._serialized_end=1564
+  _globals['_RESPONSETYPE']._serialized_start=1566
+  _globals['_RESPONSETYPE']._serialized_end=1689
+  _globals['_REVIEWSTATUS']._serialized_start=1691
+  _globals['_REVIEWSTATUS']._serialized_end=1767
   _globals['_UUID']._serialized_start=67
   _globals['_UUID']._serialized_end=88
-  _globals['_QUESTIONREQUEST']._serialized_start=90
-  _globals['_QUESTIONREQUEST']._serialized_end=210
-  _globals['_USERCONTEXT']._serialized_start=213
-  _globals['_USERCONTEXT']._serialized_end=356
-  _globals['_USERINFO']._serialized_start=358
-  _globals['_USERINFO']._serialized_end=422
-  _globals['_BIOMETRICDATA']._serialized_start=424
-  _globals['_BIOMETRICDATA']._serialized_end=515
-  _globals['_CHATMESSAGE']._serialized_start=517
-  _globals['_CHATMESSAGE']._serialized_end=608
-  _globals['_QUESTIONRESPONSE']._serialized_start=610
-  _globals['_QUESTIONRESPONSE']._serialized_end=732
-  _globals['_PAGINATIONPARAMS']._serialized_start=734
-  _globals['_PAGINATIONPARAMS']._serialized_end=783
-  _globals['_PATIENTQUESTIONREQUEST']._serialized_start=786
-  _globals['_PATIENTQUESTIONREQUEST']._serialized_end=978
-  _globals['_PATIENTQUESTIONRESPONSE']._serialized_start=980
-  _globals['_PATIENTQUESTIONRESPONSE']._serialized_end=1105
-  _globals['_QUESTIONSTATUSREQUEST']._serialized_start=1107
-  _globals['_QUESTIONSTATUSREQUEST']._serialized_end=1201
-  _globals['_QUESTIONSTATUSRESPONSE']._serialized_start=1204
-  _globals['_QUESTIONSTATUSRESPONSE']._serialized_end=1429
-  _globals['_ANSWERHISTORYREQUEST']._serialized_start=1432
-  _globals['_ANSWERHISTORYREQUEST']._serialized_end=1676
-  _globals['_ANSWERHISTORYRESPONSE']._serialized_start=1678
-  _globals['_ANSWERHISTORYRESPONSE']._serialized_end=1764
-  _globals['_QUESTIONANSWER']._serialized_start=1767
-  _globals['_QUESTIONANSWER']._serialized_end=2119
-  _globals['_PENDINGREVIEWSREQUEST']._serialized_start=2122
-  _globals['_PENDINGREVIEWSREQUEST']._serialized_end=2265
-  _globals['_REVIEWFILTER']._serialized_start=2268
-  _globals['_REVIEWFILTER']._serialized_end=2476
-  _globals['_PENDINGREVIEWSRESPONSE']._serialized_start=2478
-  _globals['_PENDINGREVIEWSRESPONSE']._serialized_end=2564
-  _globals['_PENDINGREVIEW']._serialized_start=2567
-  _globals['_PENDINGREVIEW']._serialized_end=2905
-  _globals['_REVIEWSUBMISSIONREQUEST']._serialized_start=2908
-  _globals['_REVIEWSUBMISSIONREQUEST']._serialized_end=3095
-  _globals['_REVIEWSUBMISSIONRESPONSE']._serialized_start=3097
-  _globals['_REVIEWSUBMISSIONRESPONSE']._serialized_end=3208
-  _globals['_MEDICALQASERVICE']._serialized_start=3747
-  _globals['_MEDICALQASERVICE']._serialized_end=3843
-  _globals['_MEDICALSERVICE']._serialized_start=3846
-  _globals['_MEDICALSERVICE']._serialized_end=4297
+  _globals['_CHATREQUEST']._serialized_start=91
+  _globals['_CHATREQUEST']._serialized_end=252
+  _globals['_CHATRESPONSE']._serialized_start=255
+  _globals['_CHATRESPONSE']._serialized_end=512
+  _globals['_MESSAGE']._serialized_start=514
+  _globals['_MESSAGE']._serialized_end=603
+  _globals['_AIDRAFT']._serialized_start=605
+  _globals['_AIDRAFT']._serialized_end=657
+  _globals['_REVIEWUPDATE']._serialized_start=659
+  _globals['_REVIEWUPDATE']._serialized_end=738
+  _globals['_QUESTIONREQUEST']._serialized_start=740
+  _globals['_QUESTIONREQUEST']._serialized_end=860
+  _globals['_USERCONTEXT']._serialized_start=863
+  _globals['_USERCONTEXT']._serialized_end=1006
+  _globals['_USERINFO']._serialized_start=1008
+  _globals['_USERINFO']._serialized_end=1072
+  _globals['_BIOMETRICDATA']._serialized_start=1074
+  _globals['_BIOMETRICDATA']._serialized_end=1165
+  _globals['_CHATMESSAGE']._serialized_start=1167
+  _globals['_CHATMESSAGE']._serialized_end=1258
+  _globals['_QUESTIONRESPONSE']._serialized_start=1260
+  _globals['_QUESTIONRESPONSE']._serialized_end=1382
+  _globals['_MEDICALCHATSERVICE']._serialized_start=1769
+  _globals['_MEDICALCHATSERVICE']._serialized_end=1854
+  _globals['_MEDICALQASERVICE']._serialized_start=1856
+  _globals['_MEDICALQASERVICE']._serialized_end=1952
 # @@protoc_insertion_point(module_scope)

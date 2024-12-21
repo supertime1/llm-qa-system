@@ -13,18 +13,35 @@ import (
 	"google.golang.org/grpc"
 )
 
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func main() {
 	ctx := context.Background()
 
+	// Get configuration from environment variables
+	dbURL := getEnvOrDefault("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/medical_chat")
+	llmAddr := getEnvOrDefault("LLM_SERVICE_ADDR", "localhost:50051")
+	redisAddr := getEnvOrDefault("REDIS_ADDR", "localhost:6379")
+	serverPort := getEnvOrDefault("SERVER_PORT", "50052")
+
 	// Connect to database using pgx
-	dbpool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	dbpool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v", err)
 	}
 	defer dbpool.Close()
 
-	// Create server group
-	serverGroup, err := server.NewServerGroup(dbpool, "localhost:50051")
+	// Create server group with all necessary services
+	serverGroup, err := server.NewServerGroup(
+		dbpool,
+		llmAddr,
+		redisAddr,
+	)
 	if err != nil {
 		log.Fatalf("Failed to create server group: %v", err)
 	}
@@ -34,7 +51,7 @@ func main() {
 	serverGroup.Register(grpcServer)
 
 	// Start listening
-	lis, err := net.Listen("tcp", ":50052")
+	lis, err := net.Listen("tcp", ":"+serverPort)
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
@@ -52,6 +69,9 @@ func main() {
 
 	// Start server
 	log.Printf("Server listening at %v", lis.Addr())
+	log.Printf("Connected to LLM service at %v", llmAddr)
+	log.Printf("Connected to Redis at %v", redisAddr)
+
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}

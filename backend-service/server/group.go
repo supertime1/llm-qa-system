@@ -3,9 +3,10 @@ package server
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	pb "llm-qa-system/backend-service/src/proto"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -13,26 +14,37 @@ import (
 )
 
 type ServerGroup struct {
-	medicalServer *MedicalServer
-	healthServer  *HealthServer
-	db            *pgxpool.Pool
+	chatServer   *ChatServer
+	healthServer *HealthServer
+	db           *pgxpool.Pool
+	redis        *redis.Client
 }
 
-func NewServerGroup(pool *pgxpool.Pool, llmServiceAddr string) (*ServerGroup, error) {
-	medicalServer, err := NewMedicalServer(pool, llmServiceAddr)
+func NewServerGroup(pool *pgxpool.Pool, llmServiceAddr string, redisAddr string) (*ServerGroup, error) {
+
+	// Create redis client
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+	})
+
+	baseServer := NewBaseServer(pool)
+
+	// Create chat server
+	chatServer, err := NewChatServer(baseServer, llmServiceAddr, redisClient)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ServerGroup{
-		db:            pool,
-		medicalServer: medicalServer,
-		healthServer:  newHealthServer(pool),
+		db:           pool,
+		redis:        redisClient,
+		chatServer:   chatServer,
+		healthServer: newHealthServer(pool),
 	}, nil
 }
 
 func (s *ServerGroup) Register(grpcServer *grpc.Server) {
-	pb.RegisterMedicalServiceServer(grpcServer, s.medicalServer)
+	pb.RegisterMedicalChatServiceServer(grpcServer, s.chatServer) // Add this
 	healthpb.RegisterHealthServer(grpcServer, s.healthServer)
 	reflection.Register(grpcServer)
 }

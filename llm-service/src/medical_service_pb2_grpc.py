@@ -2,7 +2,72 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from . import medical_service_pb2 as medical__service__pb2
+import medical_service_pb2 as medical__service__pb2
+
+
+class MedicalChatServiceStub(object):
+    """Main Chat Service
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.ChatStream = channel.stream_stream(
+                '/backend.MedicalChatService/ChatStream',
+                request_serializer=medical__service__pb2.ChatRequest.SerializeToString,
+                response_deserializer=medical__service__pb2.ChatResponse.FromString,
+                )
+
+
+class MedicalChatServiceServicer(object):
+    """Main Chat Service
+    """
+
+    def ChatStream(self, request_iterator, context):
+        """Bidirectional streaming for real-time chat
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_MedicalChatServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'ChatStream': grpc.stream_stream_rpc_method_handler(
+                    servicer.ChatStream,
+                    request_deserializer=medical__service__pb2.ChatRequest.FromString,
+                    response_serializer=medical__service__pb2.ChatResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'backend.MedicalChatService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+
+
+ # This class is part of an EXPERIMENTAL API.
+class MedicalChatService(object):
+    """Main Chat Service
+    """
+
+    @staticmethod
+    def ChatStream(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(request_iterator, target, '/backend.MedicalChatService/ChatStream',
+            medical__service__pb2.ChatRequest.SerializeToString,
+            medical__service__pb2.ChatResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
 
 class MedicalQAServiceStub(object):
@@ -66,203 +131,5 @@ class MedicalQAService(object):
         return grpc.experimental.unary_unary(request, target, '/backend.MedicalQAService/GenerateDraftAnswer',
             medical__service__pb2.QuestionRequest.SerializeToString,
             medical__service__pb2.QuestionResponse.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-
-class MedicalServiceStub(object):
-    """Backend Medical Service
-    """
-
-    def __init__(self, channel):
-        """Constructor.
-
-        Args:
-            channel: A grpc.Channel.
-        """
-        self.SubmitQuestion = channel.unary_unary(
-                '/backend.MedicalService/SubmitQuestion',
-                request_serializer=medical__service__pb2.PatientQuestionRequest.SerializeToString,
-                response_deserializer=medical__service__pb2.PatientQuestionResponse.FromString,
-                )
-        self.GetQuestionStatus = channel.unary_unary(
-                '/backend.MedicalService/GetQuestionStatus',
-                request_serializer=medical__service__pb2.QuestionStatusRequest.SerializeToString,
-                response_deserializer=medical__service__pb2.QuestionStatusResponse.FromString,
-                )
-        self.GetAnswerHistory = channel.unary_unary(
-                '/backend.MedicalService/GetAnswerHistory',
-                request_serializer=medical__service__pb2.AnswerHistoryRequest.SerializeToString,
-                response_deserializer=medical__service__pb2.AnswerHistoryResponse.FromString,
-                )
-        self.GetPendingReviews = channel.unary_unary(
-                '/backend.MedicalService/GetPendingReviews',
-                request_serializer=medical__service__pb2.PendingReviewsRequest.SerializeToString,
-                response_deserializer=medical__service__pb2.PendingReviewsResponse.FromString,
-                )
-        self.SubmitReview = channel.unary_unary(
-                '/backend.MedicalService/SubmitReview',
-                request_serializer=medical__service__pb2.ReviewSubmissionRequest.SerializeToString,
-                response_deserializer=medical__service__pb2.ReviewSubmissionResponse.FromString,
-                )
-
-
-class MedicalServiceServicer(object):
-    """Backend Medical Service
-    """
-
-    def SubmitQuestion(self, request, context):
-        """Patient operations
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetQuestionStatus(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetAnswerHistory(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetPendingReviews(self, request, context):
-        """Doctor operations
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SubmitReview(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-
-def add_MedicalServiceServicer_to_server(servicer, server):
-    rpc_method_handlers = {
-            'SubmitQuestion': grpc.unary_unary_rpc_method_handler(
-                    servicer.SubmitQuestion,
-                    request_deserializer=medical__service__pb2.PatientQuestionRequest.FromString,
-                    response_serializer=medical__service__pb2.PatientQuestionResponse.SerializeToString,
-            ),
-            'GetQuestionStatus': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetQuestionStatus,
-                    request_deserializer=medical__service__pb2.QuestionStatusRequest.FromString,
-                    response_serializer=medical__service__pb2.QuestionStatusResponse.SerializeToString,
-            ),
-            'GetAnswerHistory': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetAnswerHistory,
-                    request_deserializer=medical__service__pb2.AnswerHistoryRequest.FromString,
-                    response_serializer=medical__service__pb2.AnswerHistoryResponse.SerializeToString,
-            ),
-            'GetPendingReviews': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetPendingReviews,
-                    request_deserializer=medical__service__pb2.PendingReviewsRequest.FromString,
-                    response_serializer=medical__service__pb2.PendingReviewsResponse.SerializeToString,
-            ),
-            'SubmitReview': grpc.unary_unary_rpc_method_handler(
-                    servicer.SubmitReview,
-                    request_deserializer=medical__service__pb2.ReviewSubmissionRequest.FromString,
-                    response_serializer=medical__service__pb2.ReviewSubmissionResponse.SerializeToString,
-            ),
-    }
-    generic_handler = grpc.method_handlers_generic_handler(
-            'backend.MedicalService', rpc_method_handlers)
-    server.add_generic_rpc_handlers((generic_handler,))
-
-
- # This class is part of an EXPERIMENTAL API.
-class MedicalService(object):
-    """Backend Medical Service
-    """
-
-    @staticmethod
-    def SubmitQuestion(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/backend.MedicalService/SubmitQuestion',
-            medical__service__pb2.PatientQuestionRequest.SerializeToString,
-            medical__service__pb2.PatientQuestionResponse.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def GetQuestionStatus(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/backend.MedicalService/GetQuestionStatus',
-            medical__service__pb2.QuestionStatusRequest.SerializeToString,
-            medical__service__pb2.QuestionStatusResponse.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def GetAnswerHistory(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/backend.MedicalService/GetAnswerHistory',
-            medical__service__pb2.AnswerHistoryRequest.SerializeToString,
-            medical__service__pb2.AnswerHistoryResponse.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def GetPendingReviews(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/backend.MedicalService/GetPendingReviews',
-            medical__service__pb2.PendingReviewsRequest.SerializeToString,
-            medical__service__pb2.PendingReviewsResponse.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def SubmitReview(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/backend.MedicalService/SubmitReview',
-            medical__service__pb2.ReviewSubmissionRequest.SerializeToString,
-            medical__service__pb2.ReviewSubmissionResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
