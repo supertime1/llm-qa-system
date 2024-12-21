@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	pb "llm-qa-system/backend-service/src/proto"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -96,11 +98,25 @@ func main() {
 		}
 	}()
 
-	// Read messages from stdin and send them
+	// Create a buffered reader for stdin
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Type your messages (press Ctrl+C to quit):")
+
 	for {
-		var input string
-		fmt.Scanln(&input)
+		// Read until newline (including spaces)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("Error reading input: %v", err)
+			continue
+		}
+
+		// Trim the trailing newline and any carriage return
+		input = strings.TrimSpace(input)
+
+		// Skip empty messages
+		if input == "" {
+			continue
+		}
 
 		err = stream.Send(&pb.ChatRequest{
 			ChatId:   &pb.UUID{Value: chatID[:]},

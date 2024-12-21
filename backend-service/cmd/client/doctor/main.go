@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,11 +9,51 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// Helper function to format UUID bytes to string
+func formatUUID(bytes []byte) string {
+	if len(bytes) != 16 {
+		return "invalid-uuid"
+	}
+	uuid := [16]byte{}
+	copy(uuid[:], bytes)
+	return fmt.Sprintf("%x-%x-%x-%x-%x",
+		uuid[0:4],
+		uuid[4:6],
+		uuid[6:8],
+		uuid[8:10],
+		uuid[10:16])
+}
+
+// Helper function to format chat response
+func formatResponse(resp *pb.ChatResponse) string {
+	var msgContent string
+	switch payload := resp.Payload.(type) {
+	case *pb.ChatResponse_Message:
+		senderID := formatUUID(payload.Message.SenderId.Value)
+		role := payload.Message.Role.String()
+		msgContent = fmt.Sprintf("[%s][%s]: %s", role, senderID, payload.Message.Content)
+	case *pb.ChatResponse_AiDraft:
+		msgContent = fmt.Sprintf("[AI DRAFT] Confidence: %.2f\nContent: %s",
+			payload.AiDraft.ConfidenceScore,
+			payload.AiDraft.Content)
+	case *pb.ChatResponse_Review:
+		msgContent = fmt.Sprintf("[REVIEW] Status: %s\nContent: %s",
+			payload.Review.Status.String(),
+			payload.Review.ModifiedContent)
+	}
+
+	timestamp := time.Unix(resp.Timestamp.Seconds, int64(resp.Timestamp.Nanos))
+	return fmt.Sprintf("\n=== Message at %s ===\n%s\n",
+		timestamp.Format("2006-01-02 15:04:05"),
+		msgContent)
+}
 
 func main() {
 	serverAddr := "localhost:50052"
@@ -28,9 +69,12 @@ func main() {
 		log.Fatalf("Failed to create stream: %v", err)
 	}
 
+	// Create a buffered reader for chat ID input
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Enter chat ID to join: ")
-	var chatIDStr string
-	fmt.Scanln(&chatIDStr)
+	chatIDStr, _ := reader.ReadString('\n')
+	chatIDStr = strings.TrimSpace(chatIDStr)
+
 	chatID, err := uuid.Parse(chatIDStr)
 	if err != nil {
 		log.Fatalf("Invalid chat ID: %v", err)
@@ -59,19 +103,27 @@ func main() {
 				log.Printf("Stream closed: %v", err)
 				os.Exit(1)
 			}
-			log.Printf("Received: %+v\n", resp)
+			fmt.Print(formatResponse(resp))
 		}
 	}()
 
-	// Read commands from stdin
 	fmt.Println("Commands:")
 	fmt.Println("  review <approve|reject|modify> [content] - Review AI draft")
 	fmt.Println("  send <message> - Send a message")
 	fmt.Println("Type your commands (press Ctrl+C to quit):")
 
 	for {
-		var input string
-		fmt.Scanln(&input)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("Error reading input: %v", err)
+			continue
+		}
+
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+
 		parts := strings.SplitN(input, " ", 3)
 
 		switch parts[0] {
@@ -87,7 +139,7 @@ func main() {
 			switch parts[1] {
 			case "approve":
 				status = pb.ReviewStatus_APPROVED
-				content = "This is a simulated AI response to your question. The doctor will review this shortly."
+				content = "This is a simulated AI response approved by the doctor."
 			case "reject":
 				status = pb.ReviewStatus_REJECTED
 			case "modify":
@@ -121,10 +173,11 @@ func main() {
 				fmt.Println("Usage: send <message>")
 				continue
 			}
+			message := strings.Join(parts[1:], " ") // Join all parts after "send" as the message
 			err = stream.Send(&pb.ChatRequest{
 				ChatId:   &pb.UUID{Value: chatID[:]},
 				SenderId: &pb.UUID{Value: doctorID[:]},
-				Content:  parts[1],
+				Content:  message,
 				Type:     pb.RequestType_SEND_MESSAGE,
 				Role:     pb.Role_ROLE_DOCTOR,
 			})
