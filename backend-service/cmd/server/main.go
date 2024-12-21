@@ -25,8 +25,6 @@ func main() {
 
 	// Get configuration from environment variables
 	dbURL := getEnvOrDefault("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/medical_chat")
-	llmAddr := getEnvOrDefault("LLM_SERVICE_ADDR", "localhost:50051")
-	redisAddr := getEnvOrDefault("REDIS_ADDR", "localhost:6379")
 	serverPort := getEnvOrDefault("SERVER_PORT", "50052")
 
 	// Connect to database using pgx
@@ -36,12 +34,8 @@ func main() {
 	}
 	defer dbpool.Close()
 
-	// Create server group with all necessary services
-	serverGroup, err := server.NewServerGroup(
-		dbpool,
-		llmAddr,
-		redisAddr,
-	)
+	// Create server group
+	serverGroup, err := server.NewServerGroup(dbpool, "", "")
 	if err != nil {
 		log.Fatalf("Failed to create server group: %v", err)
 	}
@@ -69,9 +63,6 @@ func main() {
 
 	// Start server
 	log.Printf("Server listening at %v", lis.Addr())
-	log.Printf("Connected to LLM service at %v", llmAddr)
-	log.Printf("Connected to Redis at %v", redisAddr)
-
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}

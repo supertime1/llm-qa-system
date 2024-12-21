@@ -5,87 +5,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	pb "llm-qa-system/backend-service/src/proto"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// ChatParticipant represents a participant in the chat
+type ChatParticipant struct {
+	stream pb.MedicalChatService_ChatStreamServer
+	role   pb.Role
+}
 
 type ChatServer struct {
 	pb.UnimplementedMedicalChatServiceServer
 	*BaseServer
-	llmClient     *LLMClient
-	redis         *redis.Client
 	activeStreams sync.Map
 }
 
-func NewChatServer(base *BaseServer, llmAddr string, redisClient *redis.Client) (*ChatServer, error) {
-	llmClient, err := NewLLMClient(llmAddr)
-	if err != nil {
-		return nil, err
-	}
+func NewChatServer(base *BaseServer) (*ChatServer, error) {
 
 	server := &ChatServer{
 		BaseServer:    base,
-		llmClient:     llmClient,
-		redis:         redisClient,
 		activeStreams: sync.Map{},
 	}
 
-	// Start Redis subscription handler
-	go server.handleRedisSubscriptions(context.Background())
-
 	return server, nil
-}
-
-func (s *ChatServer) handleRedisSubscriptions(ctx context.Context) {
-	pubsub := s.redis.Subscribe(ctx, "chat:*")
-	defer pubsub.Close()
-
-	for {
-		msg, err := pubsub.ReceiveMessage(ctx)
-		if err != nil {
-			fmt.Printf("Redis subscription error: %v\n", err)
-			continue
-		}
-
-		// Parse message and broadcast to relevant streams
-		var redisMsg struct {
-			ChatID   string         `json:"chat_id"`
-			Type     string         `json:"type"`
-			Content  string         `json:"content"`
-			Metadata map[string]any `json:"metadata"`
-		}
-
-		if err := json.Unmarshal([]byte(msg.Payload), &redisMsg); err != nil {
-			fmt.Printf("Failed to parse Redis message: %v\n", err)
-			continue
-		}
-
-		// Convert chat ID from string to UUID bytes
-		chatIDBytes, err := uuid.Parse(redisMsg.ChatID)
-		if err != nil {
-			fmt.Printf("Invalid chat ID in Redis message: %v\n", err)
-			continue
-		}
-
-		// Broadcast to active streams
-		s.broadcastResponse(&pb.ChatResponse{
-			ChatId: &pb.UUID{Value: chatIDBytes[:]},
-			Type:   pb.ResponseType_NEW_MESSAGE,
-			Payload: &pb.ChatResponse_Message{
-				Message: &pb.Message{
-					SenderId: &pb.UUID{Value: uuid.Nil[:]},
-					Content:  redisMsg.Content,
-					Role:     pb.Role_ROLE_SYSTEM,
-				},
-			},
-			Timestamp: timestamppb.Now(),
-		})
-	}
 }
 
 func (s *ChatServer) ChatStream(stream pb.MedicalChatService_ChatStreamServer) error {
@@ -121,10 +67,7 @@ func (s *ChatServer) ChatStream(stream pb.MedicalChatService_ChatStreamServer) e
 
 func (s *ChatServer) handleStartChat(ctx context.Context, req *pb.ChatRequest, stream pb.MedicalChatService_ChatStreamServer) error {
 	chatID := req.ChatId.Value
-	s.registerStream(chatID, stream)
-
-	// Subscribe to Redis channel for this chat
-	go s.subscribeToChat(ctx, fmt.Sprintf("%x", chatID))
+	s.registerStream(chatID, req.SenderId.Value, stream, req.Role)
 
 	return stream.Send(&pb.ChatResponse{
 		ChatId: req.ChatId,
@@ -141,65 +84,73 @@ func (s *ChatServer) handleStartChat(ctx context.Context, req *pb.ChatRequest, s
 }
 
 func (s *ChatServer) handleMessage(ctx context.Context, req *pb.ChatRequest, stream pb.MedicalChatService_ChatStreamServer) error {
-	// Broadcast message to all participants
+	// First broadcast the original message
 	if err := s.broadcastMessage(req); err != nil {
 		return err
 	}
 
-	// If message is from patient, generate AI draft
+	// If message is from patient, simulate an AI response for doctor to review
 	if req.Role == pb.Role_ROLE_PATIENT {
-		go s.generateAndBroadcastDraft(ctx, req)
+
+		s.broadcastResponse(&pb.ChatResponse{
+			ChatId: req.ChatId,
+			Type:   pb.ResponseType_DOCTOR_REVIEWING,
+			Payload: &pb.ChatResponse_Message{
+				Message: &pb.Message{
+					SenderId: &pb.UUID{Value: []byte(uuid.Nil[:])},
+					Content:  "Doctor is reviewing your question...",
+					Role:     pb.Role_ROLE_SYSTEM,
+				},
+			},
+			Timestamp: timestamppb.Now(),
+		})
+
+		// Hardcoded AI response for now
+		aiResponse := "This is a simulated AI response to your question. The doctor will review this shortly."
+
+		// Send AI draft only to doctor
+		chatKey := fmt.Sprintf("%x", req.ChatId.Value)
+		if participants, ok := s.activeStreams.Load(chatKey); ok {
+			for _, participant := range participants.(map[string]*ChatParticipant) {
+				if participant.role == pb.Role_ROLE_DOCTOR {
+					participant.stream.Send(&pb.ChatResponse{
+						ChatId: req.ChatId,
+						Type:   pb.ResponseType_AI_DRAFT_READY,
+						Payload: &pb.ChatResponse_AiDraft{
+							AiDraft: &pb.AIDraft{
+								Content:         aiResponse,
+								ConfidenceScore: 0.85,
+							},
+						},
+						Timestamp: timestamppb.Now(),
+					})
+				}
+			}
+		}
 	}
 
 	return nil
 }
 
-func (s *ChatServer) generateAndBroadcastDraft(ctx context.Context, req *pb.ChatRequest) {
-	// Call LLM service using the client field
-	llmResp, err := s.llmClient.client.GenerateDraftAnswer(ctx, &pb.QuestionRequest{
-		QuestionId:   &pb.UUID{Value: req.ChatId.Value},
-		QuestionText: req.Content,
-		UserContext:  &pb.UserContext{}, // Add user context if needed
-	})
-	if err != nil {
-		s.broadcastError(req.ChatId, fmt.Sprintf("Failed to generate AI draft: %v", err))
-		return
-	}
+// Helper method to register a new participant
+func (s *ChatServer) registerStream(chatID []byte, senderID []byte, stream pb.MedicalChatService_ChatStreamServer, role pb.Role) {
+	chatKey := fmt.Sprintf("%x", chatID)
+	participantKey := fmt.Sprintf("%x", senderID)
 
-	// Publish draft to Redis for doctor notification
-	notification := map[string]interface{}{
-		"chat_id":          fmt.Sprintf("%x", req.ChatId.Value),
-		"draft_answer":     llmResp.DraftAnswer,
-		"confidence_score": llmResp.ConfidenceScore,
-		"timestamp":        time.Now().Unix(),
-	}
-
-	if payload, err := json.Marshal(notification); err == nil {
-		s.redis.Publish(ctx, fmt.Sprintf("chat:%x:draft", req.ChatId.Value), payload)
-	}
-
-	// Broadcast AI draft to all participants
-	s.broadcastResponse(&pb.ChatResponse{
-		ChatId: req.ChatId,
-		Type:   pb.ResponseType_AI_DRAFT_READY,
-		Payload: &pb.ChatResponse_AiDraft{
-			AiDraft: &pb.AIDraft{
-				Content:         llmResp.DraftAnswer,
-				ConfidenceScore: llmResp.ConfidenceScore,
-			},
-		},
-		Timestamp: timestamppb.Now(),
-	})
-}
-
-// Helper methods for managing streams and broadcasting
-func (s *ChatServer) registerStream(chatID []byte, stream pb.MedicalChatService_ChatStreamServer) {
-	key := fmt.Sprintf("%x", chatID)
-	if streams, ok := s.activeStreams.Load(key); ok {
-		streams = append(streams.([]pb.MedicalChatService_ChatStreamServer), stream)
-		s.activeStreams.Store(key, streams)
+	if participants, ok := s.activeStreams.Load(chatKey); ok {
+		participantsMap := participants.(map[string]*ChatParticipant)
+		participantsMap[participantKey] = &ChatParticipant{
+			stream: stream,
+			role:   role,
+		}
+		s.activeStreams.Store(chatKey, participantsMap)
 	} else {
-		s.activeStreams.Store(key, []pb.MedicalChatService_ChatStreamServer{stream})
+		newParticipants := make(map[string]*ChatParticipant)
+		newParticipants[participantKey] = &ChatParticipant{
+			stream: stream,
+			role:   role,
+		}
+		s.activeStreams.Store(chatKey, newParticipants)
 	}
 }
 
@@ -219,11 +170,10 @@ func (s *ChatServer) broadcastMessage(req *pb.ChatRequest) error {
 }
 
 func (s *ChatServer) broadcastResponse(resp *pb.ChatResponse) error {
-	key := fmt.Sprintf("%x", resp.ChatId.Value)
-	if streams, ok := s.activeStreams.Load(key); ok {
-		for _, stream := range streams.([]pb.MedicalChatService_ChatStreamServer) {
-			if err := stream.Send(resp); err != nil {
-				// Log error but continue broadcasting to others
+	chatKey := fmt.Sprintf("%x", resp.ChatId.Value)
+	if participants, ok := s.activeStreams.Load(chatKey); ok {
+		for _, participant := range participants.(map[string]*ChatParticipant) {
+			if err := participant.stream.Send(resp); err != nil {
 				fmt.Printf("Error broadcasting to stream: %v\n", err)
 			}
 		}
@@ -231,28 +181,10 @@ func (s *ChatServer) broadcastResponse(resp *pb.ChatResponse) error {
 	return nil
 }
 
-func (s *ChatServer) broadcastError(chatID *pb.UUID, errMsg string) {
-	s.broadcastResponse(&pb.ChatResponse{
-		ChatId: chatID,
-		Type:   pb.ResponseType_ERROR,
-		Payload: &pb.ChatResponse_Message{
-			Message: &pb.Message{
-				SenderId: &pb.UUID{Value: []byte(uuid.Nil[:])},
-				Content:  errMsg,
-				Role:     pb.Role_ROLE_SYSTEM,
-			},
-		},
-		Timestamp: timestamppb.Now(),
-	})
-}
-
 func (s *ChatServer) handleJoinChat(ctx context.Context, req *pb.ChatRequest, stream pb.MedicalChatService_ChatStreamServer) error {
 	// Register the doctor's stream
 	chatID := req.ChatId.Value
-	s.registerStream(chatID, stream)
-
-	// Subscribe to Redis channel for this chat
-	go s.subscribeToChat(ctx, fmt.Sprintf("%x", chatID))
+	s.registerStream(chatID, req.SenderId.Value, stream, req.Role)
 
 	// Notify all participants that a doctor has joined
 	return s.broadcastResponse(&pb.ChatResponse{
@@ -270,137 +202,62 @@ func (s *ChatServer) handleJoinChat(ctx context.Context, req *pb.ChatRequest, st
 }
 
 func (s *ChatServer) handleReview(ctx context.Context, req *pb.ChatRequest, stream pb.MedicalChatService_ChatStreamServer) error {
-	// Parse review status from message content
+	// Parse review action from message content
 	var review struct {
 		Status  pb.ReviewStatus `json:"status"`
-		Content string          `json:"content"`
+		Content string          `json:"content,omitempty"` // Optional for REJECTED status
 	}
+
 	if err := json.Unmarshal([]byte(req.Content), &review); err != nil {
 		return fmt.Errorf("invalid review format: %v", err)
 	}
 
-	// Publish review to Redis
-	notification := map[string]interface{}{
-		"chat_id":          fmt.Sprintf("%x", req.ChatId.Value),
-		"review_status":    review.Status.String(),
-		"modified_content": review.Content,
-		"reviewer_id":      fmt.Sprintf("%x", req.SenderId.Value),
-		"timestamp":        time.Now().Unix(),
-	}
-
-	if payload, err := json.Marshal(notification); err == nil {
-		s.redis.Publish(ctx, fmt.Sprintf("chat:%x:review", req.ChatId.Value), payload)
-	}
-
-	// Broadcast review status to all participants
-	return s.broadcastResponse(&pb.ChatResponse{
-		ChatId: req.ChatId,
-		Type:   pb.ResponseType_REVIEW_DONE,
-		Payload: &pb.ChatResponse_Review{
-			Review: &pb.ReviewUpdate{
-				Status:          review.Status,
-				ModifiedContent: review.Content,
+	switch review.Status {
+	case pb.ReviewStatus_APPROVED:
+		// Doctor approved AI response - broadcast it to all
+		return s.broadcastResponse(&pb.ChatResponse{
+			ChatId: req.ChatId,
+			Type:   pb.ResponseType_REVIEW_DONE,
+			Payload: &pb.ChatResponse_Message{
+				Message: &pb.Message{
+					SenderId: req.SenderId,
+					Content:  review.Content,
+					Role:     pb.Role_ROLE_DOCTOR,
+				},
 			},
-		},
-		Timestamp: timestamppb.Now(),
-	})
-}
+			Timestamp: timestamppb.Now(),
+		})
 
-func (s *ChatServer) handleDraftNotification(data map[string]interface{}) {
-	chatIDStr, ok := data["chat_id"].(string)
-	if !ok {
-		fmt.Printf("Invalid chat ID in draft notification\n")
-		return
-	}
-
-	chatIDBytes, err := uuid.Parse(chatIDStr)
-	if err != nil {
-		fmt.Printf("Failed to parse chat ID: %v\n", err)
-		return
-	}
-
-	s.broadcastResponse(&pb.ChatResponse{
-		ChatId: &pb.UUID{Value: chatIDBytes[:]},
-		Type:   pb.ResponseType_AI_DRAFT_READY,
-		Payload: &pb.ChatResponse_AiDraft{
-			AiDraft: &pb.AIDraft{
-				Content:         data["draft_answer"].(string),
-				ConfidenceScore: float32(data["confidence_score"].(float64)),
+	case pb.ReviewStatus_REJECTED:
+		// Just acknowledge the rejection - doctor will send new response separately
+		return stream.Send(&pb.ChatResponse{
+			ChatId: req.ChatId,
+			Type:   pb.ResponseType_NEW_MESSAGE,
+			Payload: &pb.ChatResponse_Message{
+				Message: &pb.Message{
+					SenderId: &pb.UUID{Value: []byte(uuid.Nil[:])},
+					Content:  "AI response rejected. Please compose new response.",
+					Role:     pb.Role_ROLE_SYSTEM,
+				},
 			},
-		},
-		Timestamp: timestamppb.Now(),
-	})
-}
+			Timestamp: timestamppb.Now(),
+		})
 
-func (s *ChatServer) handleReviewNotification(data map[string]interface{}) {
-	chatIDStr, ok := data["chat_id"].(string)
-	if !ok {
-		fmt.Printf("Invalid chat ID in review notification\n")
-		return
-	}
-
-	chatIDBytes, err := uuid.Parse(chatIDStr)
-	if err != nil {
-		fmt.Printf("Failed to parse chat ID: %v\n", err)
-		return
-	}
-
-	status := pb.ReviewStatus_REVIEW_UNKNOWN
-	switch data["review_status"].(string) {
-	case "APPROVED":
-		status = pb.ReviewStatus_APPROVED
-	case "MODIFIED":
-		status = pb.ReviewStatus_MODIFIED
-	case "REJECTED":
-		status = pb.ReviewStatus_REJECTED
-	}
-
-	s.broadcastResponse(&pb.ChatResponse{
-		ChatId: &pb.UUID{Value: chatIDBytes[:]},
-		Type:   pb.ResponseType_REVIEW_DONE,
-		Payload: &pb.ChatResponse_Review{
-			Review: &pb.ReviewUpdate{
-				Status:          status,
-				ModifiedContent: data["modified_content"].(string),
+	case pb.ReviewStatus_MODIFIED:
+		// Doctor modified AI response - broadcast modified version
+		return s.broadcastResponse(&pb.ChatResponse{
+			ChatId: req.ChatId,
+			Type:   pb.ResponseType_REVIEW_DONE,
+			Payload: &pb.ChatResponse_Message{
+				Message: &pb.Message{
+					SenderId: req.SenderId,
+					Content:  review.Content,
+					Role:     pb.Role_ROLE_DOCTOR,
+				},
 			},
-		},
-		Timestamp: timestamppb.Now(),
-	})
-}
-
-func (s *ChatServer) subscribeToChat(ctx context.Context, chatID string) {
-	pubsub := s.redis.Subscribe(ctx, fmt.Sprintf("chat:%s:*", chatID))
-	defer pubsub.Close()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			msg, err := pubsub.ReceiveMessage(ctx)
-			if err != nil {
-				fmt.Printf("Error receiving Redis message: %v\n", err)
-				continue
-			}
-			// Handle message based on channel
-			s.handleRedisMessage(msg)
-		}
-	}
-}
-
-func (s *ChatServer) handleRedisMessage(msg *redis.Message) {
-	// Parse message and update relevant streams
-	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(msg.Payload), &data); err != nil {
-		fmt.Printf("Error parsing Redis message: %v\n", err)
-		return
+			Timestamp: timestamppb.Now(),
+		})
 	}
 
-	// Handle different message types based on channel pattern
-	switch {
-	case msg.Channel == "chat:*:draft":
-		s.handleDraftNotification(data)
-	case msg.Channel == "chat:*:review":
-		s.handleReviewNotification(data)
-	}
+	return nil
 }
