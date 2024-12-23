@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 
 	pb "llm-qa-system/backend-service/src/proto"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -22,15 +24,24 @@ type ChatServer struct {
 	pb.UnimplementedMedicalChatServiceServer
 	*BaseServer
 	activeStreams sync.Map
+	llmClient     *LLMClient
+	redisClient   *redis.Client
 }
 
-func NewChatServer(base *BaseServer) (*ChatServer, error) {
+func NewChatServer(base *BaseServer, llmClient *LLMClient, redisAddr string) (*ChatServer, error) {
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+	})
 
 	server := &ChatServer{
 		BaseServer:    base,
 		activeStreams: sync.Map{},
+		llmClient:     llmClient,
+		redisClient:   redisClient,
 	}
 
+	// Start listening for LLM responses
+	go server.subscribeLLMResponses()
 	return server, nil
 }
 
@@ -105,28 +116,57 @@ func (s *ChatServer) handleMessage(ctx context.Context, req *pb.ChatRequest, str
 			Timestamp: timestamppb.Now(),
 		})
 
-		// Hardcoded AI response for now
-		aiResponse := "This is a simulated AI response to patient's question.."
-
-		// Send AI draft only to doctor
-		chatKey := fmt.Sprintf("%x", req.ChatId.Value)
-		if participants, ok := s.activeStreams.Load(chatKey); ok {
-			for _, participant := range participants.(map[string]*ChatParticipant) {
-				if participant.role == pb.Role_ROLE_DOCTOR {
-					participant.stream.Send(&pb.ChatResponse{
-						ChatId: req.ChatId,
-						Type:   pb.ResponseType_AI_DRAFT_READY,
-						Payload: &pb.ChatResponse_AiDraft{
-							AiDraft: &pb.AIDraft{
-								Content:         aiResponse,
-								ConfidenceScore: 0.85,
-							},
-						},
-						Timestamp: timestamppb.Now(),
-					})
-				}
-			}
+		// Create question request
+		id, err := uuid.New().MarshalBinary()
+		if err != nil {
+			return err
 		}
+		questionReq := &pb.QuestionRequest{
+			QuestionId:   &pb.UUID{Value: id},
+			QuestionText: req.Content,
+			UserContext: &pb.UserContext{
+				UserInfo: &pb.UserInfo{
+					// Hardcoded for now
+					Age:    "30",
+					Gender: "unknown",
+				},
+			},
+		}
+
+		// Call LLM service asynchronously
+		go func() {
+			resp, err := s.llmClient.client.GenerateDraftAnswer(context.Background(), questionReq)
+			if err != nil {
+				log.Printf("Error getting AI response: %v", err)
+				return
+			}
+
+			// Publish to Redis for doctor review
+			aiResponse := struct {
+				ChatID     []byte   `json:"chat_id"`
+				QuestionID []byte   `json:"question_id"`
+				Content    string   `json:"content"`
+				Score      float32  `json:"score"`
+				References []string `json:"references"`
+			}{
+				ChatID:     req.ChatId.Value,
+				QuestionID: questionReq.QuestionId.Value,
+				Content:    resp.DraftAnswer,
+				Score:      resp.ConfidenceScore,
+				References: resp.References,
+			}
+
+			jsonData, err := json.Marshal(aiResponse)
+			if err != nil {
+				log.Printf("Error marshaling AI response: %v", err)
+				return
+			}
+
+			err = s.redisClient.Publish(context.Background(), "ai_responses", string(jsonData)).Err()
+			if err != nil {
+				log.Printf("Error publishing to Redis: %v", err)
+			}
+		}()
 	}
 
 	return nil
@@ -260,4 +300,43 @@ func (s *ChatServer) handleReview(ctx context.Context, req *pb.ChatRequest, stre
 	}
 
 	return nil
+}
+
+func (s *ChatServer) subscribeLLMResponses() {
+	pubsub := s.redisClient.Subscribe(context.Background(), "ai_responses")
+	defer pubsub.Close()
+
+	for msg := range pubsub.Channel() {
+		var aiResp struct {
+			ChatID     []byte
+			Content    string
+			Score      float32
+			QuestionID string
+		}
+
+		if err := json.Unmarshal([]byte(msg.Payload), &aiResp); err != nil {
+			fmt.Printf("Error unmarshalling AI response: %v\n", err)
+			continue
+		}
+
+		// Only send AI draft to doctor
+		chatKey := fmt.Sprintf("%x", aiResp.ChatID)
+		if participants, ok := s.activeStreams.Load(chatKey); ok {
+			for _, participant := range participants.(map[string]*ChatParticipant) {
+				if participant.role == pb.Role_ROLE_DOCTOR {
+					participant.stream.Send(&pb.ChatResponse{
+						ChatId: &pb.UUID{Value: aiResp.ChatID},
+						Type:   pb.ResponseType_AI_DRAFT_READY,
+						Payload: &pb.ChatResponse_AiDraft{
+							AiDraft: &pb.AIDraft{
+								Content:         aiResp.Content,
+								ConfidenceScore: aiResp.Score,
+							},
+						},
+						Timestamp: timestamppb.Now(),
+					})
+				}
+			}
+		}
+	}
 }

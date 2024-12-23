@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 from google.protobuf.timestamp_pb2 import Timestamp
-from ..medical_qa_pb2 import UserContext, BiometricData, ChatMessage
+from ..medical_service_pb2 import UserContext, BiometricData, ChatMessage
 
 
 class PromptBuilder:

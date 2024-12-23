@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import medical_service_pb2 as medical__service__pb2
+from . import medical_service_pb2 as medical__service__pb2
 
 
 class MedicalChatServiceStub(object):

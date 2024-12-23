@@ -5,11 +5,11 @@ import yaml
 import os
 from dotenv import load_dotenv
 
-from . import medical_qa_pb2
-from . import medical_qa_pb2_grpc
+from . import medical_service_pb2
+from . import medical_service_pb2_grpc
 from .services.llm_service import LLMService
 
-class MedicalQAService(medical_qa_pb2_grpc.MedicalQAServiceServicer):
+class MedicalQAService(medical_service_pb2_grpc.MedicalQAServiceServicer):
     def __init__(self, config_path: str = None):
         # Add debug logging for .env file
         env_path = os.path.join(os.path.dirname(__file__), '../.env')
@@ -54,7 +54,7 @@ class MedicalQAService(medical_qa_pb2_grpc.MedicalQAServiceServicer):
             self.logger.info(f"Generated answer for question: {request.question_id}")
             
             # Ensure all fields are properly set
-            response = medical_qa_pb2.QuestionResponse(
+            response = medical_service_pb2.QuestionResponse(
                 question_id=request.question_id,
                 draft_answer=str(answer),  # Ensure it's a string
                 confidence_score=float(confidence_score),  # Ensure it's a float
@@ -68,7 +68,7 @@ class MedicalQAService(medical_qa_pb2_grpc.MedicalQAServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f'Error generating draft: {str(e)}')
             # Return empty response with required fields
-            return medical_qa_pb2.QuestionResponse(
+            return medical_service_pb2.QuestionResponse(
                 question_id=request.question_id,
                 draft_answer="",
                 confidence_score=0.0
@@ -83,7 +83,7 @@ def serve():
     server = grpc.aio.server(
         futures.ThreadPoolExecutor(max_workers=config['server']['max_workers'])
     )
-    medical_qa_pb2_grpc.add_MedicalQAServiceServicer_to_server(
+    medical_service_pb2_grpc.add_MedicalQAServiceServicer_to_server(
         MedicalQAService(), server
     )
     server.add_insecure_port(f'[::]:{config["server"]["port"]}')

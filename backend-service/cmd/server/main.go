@@ -26,6 +26,8 @@ func main() {
 	// Get configuration from environment variables
 	dbURL := getEnvOrDefault("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/medical_chat")
 	serverPort := getEnvOrDefault("SERVER_PORT", "50052")
+	llmServiceAddr := getEnvOrDefault("LLM_SERVICE_ADDR", "localhost:50051")
+	redisAddr := getEnvOrDefault("REDIS_ADDR", "localhost:6379")
 
 	// Connect to database using pgx
 	dbpool, err := pgxpool.New(ctx, dbURL)
@@ -35,7 +37,7 @@ func main() {
 	defer dbpool.Close()
 
 	// Create server group
-	serverGroup, err := server.NewServerGroup(dbpool, "", "")
+	serverGroup, err := server.NewServerGroup(dbpool, llmServiceAddr, redisAddr)
 	if err != nil {
 		log.Fatalf("Failed to create server group: %v", err)
 	}

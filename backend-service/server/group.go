@@ -22,8 +22,14 @@ func NewServerGroup(pool *pgxpool.Pool, llmServiceAddr string, redisAddr string)
 
 	baseServer := NewBaseServer(pool)
 
+	// Create LLM client
+	llmClient, err := NewLLMClient(llmServiceAddr)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create chat server
-	chatServer, err := NewChatServer(baseServer)
+	chatServer, err := NewChatServer(baseServer, llmClient, redisAddr)
 	if err != nil {
 		return nil, err
 	}

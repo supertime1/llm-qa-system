@@ -1,7 +1,7 @@
 from openai import AsyncOpenAI
 from typing import Dict, Tuple
 from ..utils.prompt_builder import PromptBuilder
-from ..medical_qa_pb2 import UserContext
+from ..medical_service_pb2 import UserContext
 
 class LLMService:
     def __init__(self, config: Dict):
