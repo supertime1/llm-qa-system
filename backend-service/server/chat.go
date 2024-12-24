@@ -141,6 +141,8 @@ func (s *ChatServer) handleMessage(ctx context.Context, req *pb.ChatRequest, str
 				return
 			}
 
+			log.Printf("AI response: %v", resp)
+
 			// Publish to Redis for doctor review
 			aiResponse := struct {
 				ChatID     []byte   `json:"chat_id"`
@@ -166,6 +168,8 @@ func (s *ChatServer) handleMessage(ctx context.Context, req *pb.ChatRequest, str
 			if err != nil {
 				log.Printf("Error publishing to Redis: %v", err)
 			}
+			log.Printf("Published to Redis: %v", err)
+
 		}()
 	}
 
@@ -241,6 +245,7 @@ func (s *ChatServer) handleJoinChat(ctx context.Context, req *pb.ChatRequest, st
 	})
 }
 
+// TODO:only call review if receiving the AI response from Redis
 func (s *ChatServer) handleReview(ctx context.Context, req *pb.ChatRequest, stream pb.MedicalChatService_ChatStreamServer) error {
 	// Parse review action from message content
 	var review struct {
@@ -303,28 +308,41 @@ func (s *ChatServer) handleReview(ctx context.Context, req *pb.ChatRequest, stre
 }
 
 func (s *ChatServer) subscribeLLMResponses() {
+	log.Printf("Starting Redis subscriber for AI responses")
+
 	pubsub := s.redisClient.Subscribe(context.Background(), "ai_responses")
 	defer pubsub.Close()
 
-	for msg := range pubsub.Channel() {
+	// Verify subscription
+	if _, err := pubsub.Receive(context.Background()); err != nil {
+		log.Printf("Error subscribing to Redis channel: %v", err)
+		return
+	}
+
+	ch := pubsub.Channel()
+	for msg := range ch {
 		var aiResp struct {
-			ChatID     []byte
-			Content    string
-			Score      float32
-			QuestionID string
+			ChatID     []byte   `json:"chat_id"`
+			QuestionID []byte   `json:"question_id"`
+			Content    string   `json:"content"`
+			Score      float32  `json:"score"`
+			References []string `json:"references"`
 		}
 
 		if err := json.Unmarshal([]byte(msg.Payload), &aiResp); err != nil {
-			fmt.Printf("Error unmarshalling AI response: %v\n", err)
+			log.Printf("Error unmarshaling AI response: %v", err)
 			continue
 		}
 
-		// Only send AI draft to doctor
+		log.Printf("Received AI response from Redis for chat %x", aiResp.ChatID)
+
+		// Send AI draft to doctor
 		chatKey := fmt.Sprintf("%x", aiResp.ChatID)
 		if participants, ok := s.activeStreams.Load(chatKey); ok {
-			for _, participant := range participants.(map[string]*ChatParticipant) {
+			participantsMap := participants.(map[string]*ChatParticipant)
+			for _, participant := range participantsMap {
 				if participant.role == pb.Role_ROLE_DOCTOR {
-					participant.stream.Send(&pb.ChatResponse{
+					response := &pb.ChatResponse{
 						ChatId: &pb.UUID{Value: aiResp.ChatID},
 						Type:   pb.ResponseType_AI_DRAFT_READY,
 						Payload: &pb.ChatResponse_AiDraft{
@@ -334,9 +352,17 @@ func (s *ChatServer) subscribeLLMResponses() {
 							},
 						},
 						Timestamp: timestamppb.Now(),
-					})
+					}
+
+					if err := participant.stream.Send(response); err != nil {
+						log.Printf("Error sending AI draft to doctor: %v", err)
+					} else {
+						log.Printf("Successfully sent AI draft to doctor in chat %s", chatKey)
+					}
 				}
 			}
+		} else {
+			log.Printf("No participants found for chat %s", chatKey)
 		}
 	}
 }

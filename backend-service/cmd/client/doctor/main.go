@@ -16,6 +16,21 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+type DoctorClient struct {
+	stream       pb.MedicalChatService_ChatStreamClient
+	chatID       []byte
+	doctorID     []byte
+	currentDraft *pb.AIDraft
+}
+
+func NewDoctorClient(stream pb.MedicalChatService_ChatStreamClient, chatID, doctorID []byte) *DoctorClient {
+	return &DoctorClient{
+		stream:   stream,
+		chatID:   chatID,
+		doctorID: doctorID,
+	}
+}
+
 // Helper function to format UUID bytes to string
 func formatUUID(bytes []byte) string {
 	if len(bytes) != 16 {
@@ -55,6 +70,58 @@ func formatResponse(resp *pb.ChatResponse) string {
 		msgContent)
 }
 
+func (c *DoctorClient) handleReview(parts []string) error {
+	if c.currentDraft == nil {
+		fmt.Println("No AI draft available for review")
+		return nil
+	}
+
+	if len(parts) < 2 {
+		fmt.Println("Usage: review <approve|reject|modify> [content]")
+		return nil
+	}
+
+	var status pb.ReviewStatus
+	var content string
+
+	switch parts[1] {
+	case "approve":
+		status = pb.ReviewStatus_APPROVED
+		content = c.currentDraft.Content
+	case "reject":
+		status = pb.ReviewStatus_REJECTED
+	case "modify":
+		if len(parts) < 3 {
+			fmt.Println("Usage: review modify <content>")
+			return nil
+		}
+		status = pb.ReviewStatus_MODIFIED
+		content = strings.Join(parts[2:], " ")
+	default:
+		fmt.Println("Invalid review status")
+		return nil
+	}
+
+	review := map[string]interface{}{
+		"status":  status,
+		"content": content,
+	}
+	reviewContent, _ := json.Marshal(review)
+
+	err := c.stream.Send(&pb.ChatRequest{
+		ChatId:   &pb.UUID{Value: c.chatID},
+		SenderId: &pb.UUID{Value: c.doctorID},
+		Content:  string(reviewContent),
+		Type:     pb.RequestType_SUBMIT_REVIEW,
+		Role:     pb.Role_ROLE_DOCTOR,
+	})
+
+	if err == nil {
+		c.currentDraft = nil // Clear the draft after review
+	}
+	return err
+}
+
 func main() {
 	serverAddr := "localhost:50052"
 	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -82,10 +149,13 @@ func main() {
 
 	doctorID := uuid.New()
 
+	// Create doctor client
+	doctorClient := NewDoctorClient(stream, chatID[:], doctorID[:])
+
 	// Join chat
 	err = stream.Send(&pb.ChatRequest{
-		ChatId:   &pb.UUID{Value: chatID[:]},
-		SenderId: &pb.UUID{Value: doctorID[:]},
+		ChatId:   &pb.UUID{Value: doctorClient.chatID},
+		SenderId: &pb.UUID{Value: doctorClient.doctorID},
 		Type:     pb.RequestType_JOIN_CHAT,
 		Role:     pb.Role_ROLE_DOCTOR,
 	})
@@ -103,12 +173,20 @@ func main() {
 				log.Printf("Stream closed: %v", err)
 				os.Exit(1)
 			}
+
+			// Update current draft if received
+			if aiDraft := resp.GetAiDraft(); aiDraft != nil {
+				doctorClient.currentDraft = aiDraft
+				fmt.Println("\n=== New AI Draft Received ===")
+				fmt.Println("Use 'review <approve|reject|modify> [content]' to review")
+			}
+
 			fmt.Print(formatResponse(resp))
 		}
 	}()
 
 	fmt.Println("Commands:")
-	fmt.Println("  review <approve|reject|modify> [content] - Review AI draft")
+	fmt.Println("  review <approve|reject|modify> [content] - Review AI draft (only available when draft exists)")
 	fmt.Println("  send <message> - Send a message")
 	fmt.Println("Type your commands (press Ctrl+C to quit):")
 
@@ -128,58 +206,22 @@ func main() {
 
 		switch parts[0] {
 		case "review":
-			if len(parts) < 2 {
-				fmt.Println("Usage: review <approve|reject|modify> [content]")
-				continue
-			}
-
-			var status pb.ReviewStatus
-			var content string
-
-			switch parts[1] {
-			case "approve":
-				status = pb.ReviewStatus_APPROVED
-			case "reject":
-				status = pb.ReviewStatus_REJECTED
-			case "modify":
-				if len(parts) < 3 {
-					fmt.Println("Usage: review modify <content>")
-					continue
-				}
-				status = pb.ReviewStatus_MODIFIED
-				content = parts[2]
-			default:
-				fmt.Println("Invalid review status")
-				continue
-			}
-
-			review := map[string]interface{}{
-				"status":  status,
-				"content": content,
-			}
-			reviewContent, _ := json.Marshal(review)
-
-			err = stream.Send(&pb.ChatRequest{
-				ChatId:   &pb.UUID{Value: chatID[:]},
-				SenderId: &pb.UUID{Value: doctorID[:]},
-				Content:  string(reviewContent),
-				Type:     pb.RequestType_SUBMIT_REVIEW,
-				Role:     pb.Role_ROLE_DOCTOR,
-			})
-
+			err = doctorClient.handleReview(parts)
 		case "send":
 			if len(parts) < 2 {
 				fmt.Println("Usage: send <message>")
 				continue
 			}
-			message := strings.Join(parts[1:], " ") // Join all parts after "send" as the message
+			message := strings.Join(parts[1:], " ")
 			err = stream.Send(&pb.ChatRequest{
-				ChatId:   &pb.UUID{Value: chatID[:]},
-				SenderId: &pb.UUID{Value: doctorID[:]},
+				ChatId:   &pb.UUID{Value: doctorClient.chatID},
+				SenderId: &pb.UUID{Value: doctorClient.doctorID},
 				Content:  message,
 				Type:     pb.RequestType_SEND_MESSAGE,
 				Role:     pb.Role_ROLE_DOCTOR,
 			})
+		default:
+			fmt.Println("Unknown command. Available commands: review, send")
 		}
 
 		if err != nil {
