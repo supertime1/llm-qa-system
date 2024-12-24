@@ -1,170 +1,67 @@
--- Patient operations
--- name: CreateQuestion :one
-INSERT INTO questions (
-    patient_id,
-    question_text,
-    question_type,
-    department,
-    urgency_level,
-    status
+-- User related queries
+-- name: GetUserByID :one
+SELECT * FROM users WHERE id = $1;
+
+-- name: GetUserByEmail :one
+SELECT * FROM users WHERE email = $1;
+
+-- name: CreateUser :one
+INSERT INTO users (
+    email,
+    name
 ) VALUES (
-    $1, $2, $3, $4, $5, 'STATUS_PENDING'
+    $1, $2
 ) RETURNING *;
 
--- name: GetQuestionStatus :one
-SELECT 
-    q.*,
-    a.answer_text,
-    a.doctor_id as answered_by
-FROM questions q
-LEFT JOIN answers a ON q.id = a.question_id
-WHERE q.id = $1 AND q.patient_id = $2
-LIMIT 1;
-
--- name: GetAnswerHistory :many
-SELECT 
-    q.id as question_id,
-    q.question_text,
-    q.question_type,
-    q.department,
-    a.answer_text as answer,
-    q.status,
-    q.created_at,
-    a.created_at as answered_at,
-    d.name as answered_by
-FROM questions q
-LEFT JOIN answers a ON q.id = a.question_id
-LEFT JOIN doctors d ON a.doctor_id = d.id
-WHERE q.patient_id = $1
-    AND ($2::question_status IS NULL OR q.status = $2)
-    AND ($3::timestamptz IS NULL OR q.created_at >= $3)
-    AND ($4::timestamptz IS NULL OR q.created_at <= $4)
-ORDER BY q.created_at DESC
-LIMIT $5 OFFSET $6;
-
--- name: GetAnswerHistoryCount :one
-SELECT COUNT(*)
-FROM questions
-WHERE patient_id = $1
-    AND ($2::question_status IS NULL OR status = $2)
-    AND ($3::timestamptz IS NULL OR created_at >= $3)
-    AND ($4::timestamptz IS NULL OR created_at <= $4);
-
--- Doctor operations
--- name: GetPendingReviews :many
-SELECT 
-    q.id as question_id,
-    q.patient_id,
-    q.question_text,
-    q.question_type,
-    q.department,
-    q.urgency_level,
-    a.ai_draft_answer,
-    a.ai_confidence,
-    a.ai_references,
-    q.created_at
-FROM questions q
-LEFT JOIN answers a ON q.id = a.question_id
-WHERE q.status = 'STATUS_PENDING_REVIEW'
-    AND ($1::department IS NULL OR q.department = $1)
-    AND ($2::question_type IS NULL OR q.question_type = $2)
-    AND ($3::int IS NULL OR q.urgency_level >= $3)
-    AND ($4::timestamptz IS NULL OR q.created_at >= $4)
-    AND ($5::timestamptz IS NULL OR q.created_at <= $5)
-ORDER BY q.urgency_level DESC, q.created_at ASC
-LIMIT $6 OFFSET $7;
-
--- name: GetPendingReviewsCount :one
-SELECT COUNT(*)
-FROM questions
-WHERE status = 'STATUS_PENDING_REVIEW'
-    AND ($1::department IS NULL OR department = $1)
-    AND ($2::question_type IS NULL OR question_type = $2)
-    AND ($3::int IS NULL OR urgency_level >= $3)
-    AND ($4::timestamptz IS NULL OR created_at >= $4)
-    AND ($5::timestamptz IS NULL OR created_at <= $5);
-
--- name: SubmitReview :one
-WITH updated_question AS (
-    UPDATE questions
-    SET status = $2
-    WHERE id = $1
-    RETURNING id
-)
-INSERT INTO answers (
-    question_id,
-    doctor_id,
-    answer_text,
-    ai_draft_answer,
-    review_status,
-    review_comment
+-- Patient related queries
+-- name: CreatePatient :one
+INSERT INTO patients (
+    user_id,
+    age,
+    gender
 ) VALUES (
-    $1, $3, $4, $5, $6, $7
-)
-RETURNING *;
-
--- name: SaveAIDraftAnswer :one
-INSERT INTO answers (
-    question_id,
-    ai_draft_answer,
-    ai_confidence,
-    ai_references,
-    review_status
-) VALUES (
-    $1, $2, $3, $4, 'DECISION_UNSPECIFIED'
-)
-RETURNING *;
-
--- Patient Context Operations
--- name: GetPatientWithContext :one
-SELECT 
-    p.*,
-    json_agg(DISTINCT jsonb_build_object(
-        'type', b.type,
-        'value', b.value,
-        'unit', b.unit,
-        'measured_at', b.measured_at
-    )) FILTER (WHERE b.id IS NOT NULL) as biometric_data,
-    json_agg(DISTINCT jsonb_build_object(
-        'condition', m.condition,
-        'status', m.status,
-        'diagnosed_date', m.diagnosed_date
-    )) FILTER (WHERE m.id IS NOT NULL) as medical_history
-FROM patients p
-LEFT JOIN biometric_data b ON b.patient_id = p.id
-LEFT JOIN medical_history m ON m.patient_id = p.id
-WHERE p.id = $1
-GROUP BY p.id;
-
--- Biometric Data Operations
--- name: CreateBiometricData :one
-INSERT INTO biometric_data (
-    patient_id,
-    type,
-    value,
-    unit,
-    measured_at
-) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3
 ) RETURNING *;
 
--- name: GetPatientBiometricData :many
-SELECT * FROM biometric_data
-WHERE patient_id = $1
-    AND ($2::varchar IS NULL OR type = $2)
-    AND ($3::timestamptz IS NULL OR measured_at >= $3)
-    AND ($4::timestamptz IS NULL OR measured_at <= $4)
-ORDER BY measured_at DESC
-LIMIT $5 OFFSET $6;
+-- name: GetPatientByUserID :one
+SELECT 
+    u.id,
+    u.email,
+    u.name,
+    p.age,
+    p.gender,
+    p.created_at
+FROM users u
+JOIN patients p ON p.user_id = u.id
+WHERE u.id = $1;
 
--- name: GetLatestBiometricsByType :many
-SELECT DISTINCT ON (type) *
-FROM biometric_data
-WHERE patient_id = $1
-ORDER BY type, measured_at DESC;
+-- Doctor related queries
+-- name: CreateDoctor :one
+INSERT INTO doctors (
+    user_id,
+    department_id,
+    specialization,
+    years_of_experience
+) VALUES (
+    $1, $2, $3, $4
+) RETURNING *;
 
--- Medical History Operations
--- name: CreateMedicalHistory :one
+-- name: GetDoctorByUserID :one
+SELECT 
+    u.id,
+    u.email,
+    u.name,
+    d.department_id,
+    dept.name as department_name,
+    d.specialization,
+    d.years_of_experience
+FROM users u
+JOIN doctors d ON d.user_id = u.id
+JOIN ref_departments dept ON dept.id = d.department_id
+WHERE u.id = $1;
+
+-- Medical History
+-- name: AddMedicalHistory :one
 INSERT INTO medical_history (
     patient_id,
     condition,
@@ -176,38 +73,211 @@ INSERT INTO medical_history (
 ) RETURNING *;
 
 -- name: GetPatientMedicalHistory :many
-SELECT * FROM medical_history
-WHERE patient_id = $1
-    AND ($2::varchar IS NULL OR status = $2)
-ORDER BY diagnosed_date DESC
-LIMIT $3 OFFSET $4;
-
--- name: UpdateMedicalHistoryStatus :one
-UPDATE medical_history
-SET 
-    status = $3,
-    notes = COALESCE($4, notes)
-WHERE id = $1 AND patient_id = $2
-RETURNING *;
-
--- name: GetActiveMedicalConditions :many
-SELECT * FROM medical_history
-WHERE patient_id = $1
-    AND status IN ('ACTIVE', 'CHRONIC')
+SELECT * FROM medical_history 
+WHERE patient_id = $1 
 ORDER BY diagnosed_date DESC;
 
--- Patient Demographics Update
--- name: UpdatePatientDemographics :one
-UPDATE patients
-SET
-    age = $2,
-    gender = $3
-WHERE id = $1
-RETURNING *;
+-- name: GetActiveConditions :many
+SELECT * FROM medical_history 
+WHERE patient_id = $1 
+AND status = 'ACTIVE' 
+ORDER BY diagnosed_date DESC;
 
--- name: UpdateQuestionStatus :exec
-UPDATE questions
+-- Biometric Data
+-- name: AddBiometricData :one
+INSERT INTO biometric_data (
+    patient_id,
+    type_id,
+    value,
+    measured_at
+) VALUES (
+    $1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP)
+) RETURNING *;
+
+-- name: GetLatestBiometrics :many
+SELECT 
+    rt.name as type_name,
+    rt.unit_type,
+    bd.value,
+    bd.measured_at
+FROM (
+    SELECT DISTINCT ON (type_id) *
+    FROM biometric_data
+    WHERE patient_id = $1
+    ORDER BY type_id, measured_at DESC
+) bd
+JOIN ref_biometric_types rt ON rt.id = bd.type_id;
+
+-- Reference Data queries
+-- name: ListActiveBiometricTypes :many
+SELECT * FROM ref_biometric_types 
+WHERE active = true 
+ORDER BY name;
+
+-- name: ListActiveDepartments :many
+SELECT * FROM ref_departments 
+WHERE active = true 
+ORDER BY name;
+
+-- name: GetActivePromptTemplate :one
+SELECT version, template 
+FROM ref_prompt_templates 
+WHERE is_active = true 
+ORDER BY created_at DESC 
+LIMIT 1;
+
+-- Chat Session Management
+-- name: CreateChatSession :one
+INSERT INTO chat_sessions (
+    patient_id,
+    status
+) VALUES (
+    $1,
+    'CHAT_SESSION_STATUS_OPEN'
+) RETURNING *;
+
+-- name: UpdateChatSessionStatus :exec
+UPDATE chat_sessions 
 SET 
     status = $2,
-    updated_at = CURRENT_TIMESTAMP
+    closed_at = CASE WHEN $2 = 'CHAT_SESSION_STATUS_CLOSED' THEN CURRENT_TIMESTAMP ELSE NULL END
 WHERE id = $1;
+
+-- name: GetActiveChatSession :one
+SELECT * FROM chat_sessions 
+WHERE patient_id = $1 
+AND status = 'CHAT_SESSION_STATUS_OPEN' 
+ORDER BY created_at DESC 
+LIMIT 1;
+
+-- Chat Messages
+-- name: CreateChatMessage :one
+INSERT INTO chat_messages (
+    chat_session_id,
+    sender_id,
+    content,
+    message_type,
+    parent_message_id,
+    metadata
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING *;
+
+-- name: GetChatHistory :many
+SELECT 
+    cm.id,
+    cm.chat_session_id,
+    cm.sender_id,
+    u.name as sender_name,
+    CASE 
+        WHEN d.user_id IS NOT NULL THEN 'DOCTOR'
+        WHEN p.user_id IS NOT NULL THEN 'PATIENT'
+        ELSE 'SYSTEM'
+    END as sender_role,
+    cm.content,
+    cm.message_type,
+    cm.parent_message_id,
+    cm.metadata,
+    cm.created_at
+FROM chat_messages cm
+JOIN users u ON u.id = cm.sender_id
+LEFT JOIN doctors d ON d.user_id = cm.sender_id
+LEFT JOIN patients p ON p.user_id = cm.sender_id
+WHERE cm.chat_session_id = $1
+ORDER BY cm.created_at DESC
+LIMIT $2;
+
+-- Patient Context Query
+-- name: GetPatientContext :one
+SELECT 
+    u.id,
+    u.name,
+    p.age,
+    p.gender,
+    (
+        SELECT json_agg(json_build_object(
+            'condition', condition,
+            'status', status,
+            'diagnosed_date', diagnosed_date
+        ))
+        FROM medical_history
+        WHERE patient_id = p.user_id 
+        AND status = 'ACTIVE'
+    ) as active_conditions,
+    (
+        SELECT json_agg(json_build_object(
+            'type', rt.name,
+            'value', bd.value,
+            'unit', rt.unit_type,
+            'measured_at', bd.measured_at
+        ))
+        FROM (
+            SELECT DISTINCT ON (type_id) *
+            FROM biometric_data
+            WHERE patient_id = p.user_id
+            ORDER BY type_id, measured_at DESC
+        ) bd
+        JOIN ref_biometric_types rt ON rt.id = bd.type_id
+    ) as recent_biometrics
+FROM users u
+JOIN patients p ON p.user_id = u.id
+WHERE u.id = $1;
+
+-- AI Interactions
+-- name: CreateAIInteraction :one
+INSERT INTO ai_interactions (
+    chat_message_id,
+    prompt_template_version,
+    prompt_components,
+    ai_response,
+    confidence_score,
+    references
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING *;
+
+-- name: UpdateAIInteractionReview :one
+UPDATE ai_interactions
+SET 
+    review_status = $2,
+    review_comment = $3,
+    modified_content = $4,
+    reviewed_at = CURRENT_TIMESTAMP,
+    reviewed_by = $5
+WHERE chat_message_id = $1
+RETURNING *;
+
+-- Training Data Collection
+-- name: GetAITrainingData :many
+SELECT 
+    ai.id,
+    ai.prompt_template_version,
+    pt.template as prompt_template,
+    ai.prompt_components,
+    ai.ai_response,
+    ai.confidence_score,
+    ai.review_status,
+    ai.modified_content,
+    ai.review_comment,
+    ai.created_at,
+    ai.reviewed_at,
+    d.user_id as reviewer_id,
+    u.name as reviewer_name
+FROM ai_interactions ai
+LEFT JOIN ref_prompt_templates pt ON pt.version = ai.prompt_template_version
+LEFT JOIN doctors d ON d.user_id = ai.reviewed_by
+LEFT JOIN users u ON u.id = d.user_id
+WHERE ai.created_at BETWEEN $1 AND $2
+AND ai.review_status IS NOT NULL
+ORDER BY ai.created_at DESC;
+
+-- AI Performance Analytics
+-- name: GetAIInteractionStats :one
+SELECT 
+    COUNT(*) as total_interactions,
+    COUNT(CASE WHEN review_status = 'approved' THEN 1 END) as approved_count,
+    COUNT(CASE WHEN review_status = 'rejected' THEN 1 END) as rejected_count,
+    COUNT(CASE WHEN review_status = 'modified' THEN 1 END) as modified_count,
+    AVG(confidence_score) as avg_confidence_score
+FROM ai_interactions
+WHERE created_at BETWEEN $1 AND $2;

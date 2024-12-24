@@ -245,7 +245,6 @@ func (s *ChatServer) handleJoinChat(ctx context.Context, req *pb.ChatRequest, st
 	})
 }
 
-// TODO:only call review if receiving the AI response from Redis
 func (s *ChatServer) handleReview(ctx context.Context, req *pb.ChatRequest, stream pb.MedicalChatService_ChatStreamServer) error {
 	// Parse review action from message content
 	var review struct {
