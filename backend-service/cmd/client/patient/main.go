@@ -2,13 +2,12 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
-	"os/signal"
 	"strings"
-	"time"
 
 	pb "llm-qa-system/backend-service/src/proto"
 
@@ -17,41 +16,36 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type PatientClient struct {
+	conn      *websocket.Conn
+	sessionID string
+}
+
 func main() {
+	addr := flag.String("addr", "localhost:8080", "server address")
+	flag.Parse()
+
 	// Connect to WebSocket server
-	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws", RawQuery: "role=patient"}
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	q := u.Query()
+	q.Set("role", "patient")
+	u.RawQuery = q.Encode()
+
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
 	defer c.Close()
 
-	// Create interrupt and done channels
-	interrupt := make(chan os.Signal, 1)
-	done := make(chan struct{})
-	signal.Notify(interrupt, os.Interrupt)
+	client := &PatientClient{conn: c}
 
-	// Handle graceful shutdown
-	go func() {
-		<-interrupt
-		log.Println("\nReceived interrupt signal, closing connection...")
-		err := c.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-		if err != nil {
-			log.Printf("Error during closing websocket: %v", err)
-		}
-		close(done)
-		os.Exit(0)
-	}()
-
-	// Set up ping handler
-	c.SetPingHandler(func(string) error {
-		err := c.WriteControl(websocket.PongMessage, []byte{}, time.Now().Add(time.Second*10))
-		if err != nil {
-			log.Printf("Error sending pong: %v", err)
-		}
-		return nil
-	})
+	// Get session ID from server
+	var sessionResp map[string]string
+	if err := c.ReadJSON(&sessionResp); err != nil {
+		log.Fatal("read session:", err)
+	}
+	client.sessionID = sessionResp["session_id"]
+	fmt.Printf("Connected to session: %s\n", client.sessionID)
 
 	// Configure protojson
 	marshaler := protojson.MarshalOptions{UseProtoNames: true}
@@ -84,12 +78,17 @@ func main() {
 
 	// Handle user input
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Type your question (press Ctrl+C to quit):")
+	fmt.Println("Type your message (or 'quit' to exit):")
 
 	for {
 		fmt.Print("> ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
+
+		if input == "quit" {
+			return
+		}
+
 		if input == "" {
 			continue
 		}
@@ -112,7 +111,7 @@ func main() {
 
 		if err := c.WriteMessage(websocket.TextMessage, jsonBytes); err != nil {
 			log.Printf("write error: %v", err)
-			continue
+			return
 		}
 	}
 }

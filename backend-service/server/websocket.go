@@ -14,23 +14,31 @@ import (
 )
 
 type Connection struct {
-	conn *websocket.Conn
-	role string
+	conn      *websocket.Conn
+	role      string
+	sessionID string
+}
+
+type ChatSession struct {
+	patientConn *Connection
+	doctorConn  *Connection
+	sessionID   string
+	created     time.Time
 }
 
 type WebSocketServer struct {
 	*BaseServer
-	llmClient   *LLMClient
-	connections map[*websocket.Conn]*Connection
-	mu          sync.RWMutex
+	llmClient *LLMClient
+	sessions  map[string]*ChatSession
+	mu        sync.RWMutex
 }
 
 func NewWebSocketServer(base *BaseServer, llmClient *LLMClient) *WebSocketServer {
 	return &WebSocketServer{
-		BaseServer:  base,
-		llmClient:   llmClient,
-		connections: make(map[*websocket.Conn]*Connection),
-		mu:          sync.RWMutex{},
+		BaseServer: base,
+		llmClient:  llmClient,
+		sessions:   make(map[string]*ChatSession),
+		mu:         sync.RWMutex{},
 	}
 }
 
@@ -38,16 +46,13 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		return true // You might want to restrict this in production
 	},
 }
 
 func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Configure protojson
-
-	unmarshaler := protojson.UnmarshalOptions{
-		DiscardUnknown: true,
-	}
+	unmarshaler := protojson.UnmarshalOptions{DiscardUnknown: true}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -56,20 +61,29 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	}
 
 	role := r.URL.Query().Get("role")
-	log.Printf("New %s connected", role)
+	sessionID := r.URL.Query().Get("session")
+	doctorToken := r.URL.Query().Get("token")
 
-	s.mu.Lock()
-	s.connections[conn] = &Connection{conn: conn, role: role}
-	s.mu.Unlock()
+	connection := &Connection{
+		conn:      conn,
+		role:      role,
+		sessionID: sessionID,
+	}
 
-	defer func() {
-		s.mu.Lock()
-		delete(s.connections, conn)
-		s.mu.Unlock()
+	// Handle session management
+	if err := s.handleSession(connection, role, sessionID, doctorToken); err != nil {
+		log.Printf("Session error: %v", err)
 		conn.Close()
-		log.Printf("%s disconnected", role)
-	}()
+		return
+	}
 
+	defer s.handleDisconnect(connection)
+	// Store the session ID from handleSession
+	sessionID = connection.sessionID // Important: use the assigned session ID
+
+	log.Printf("New %s connected to session %s", role, sessionID)
+
+	// Message handling loop
 	for {
 		_, rawMsg, err := conn.ReadMessage()
 		if err != nil {
@@ -86,8 +100,8 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 		switch wsMsg.Type {
 		case pb.MessageType_PATIENT_MESSAGE:
 			if msg := wsMsg.GetMessage(); msg != nil {
-				// Forward to doctors
-				s.broadcastToRole("doctor", &wsMsg)
+				// Forward to doctor in the same session
+				s.broadcastToRole(sessionID, "doctor", &wsMsg)
 
 				// Generate AI draft
 				draftMsg := &pb.WebSocketMessage{
@@ -101,11 +115,13 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 						},
 					},
 				}
-				s.broadcastToRole("doctor", draftMsg)
+				s.broadcastToRole(sessionID, "doctor", draftMsg)
 			}
 
 		case pb.MessageType_DOCTOR_MESSAGE:
-			s.broadcastToRole("patient", &wsMsg)
+			if msg := wsMsg.GetMessage(); msg != nil {
+				s.broadcastToRole(sessionID, "patient", &wsMsg)
+			}
 
 		case pb.MessageType_DRAFT_REVIEW:
 			if review := wsMsg.GetReview(); review != nil {
@@ -120,18 +136,100 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 							},
 						},
 					}
-					s.broadcastToRole("patient", responseMsg)
+					s.broadcastToRole(sessionID, "patient", responseMsg)
 				}
 			}
 		}
 	}
 }
 
-func (s *WebSocketServer) broadcastToRole(targetRole string, msg *pb.WebSocketMessage) {
+func (s *WebSocketServer) handleSession(conn *Connection, role, sessionID, doctorToken string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	switch role {
+	case "patient":
+		if sessionID == "" {
+			// Create new session for patient
+			sessionID = generateSessionID()
+			s.sessions[sessionID] = &ChatSession{
+				patientConn: conn,
+				sessionID:   sessionID,
+				created:     time.Now(),
+			}
+			// Inform patient of their session ID
+			conn.conn.WriteJSON(map[string]string{"session_id": sessionID})
+			conn.sessionID = sessionID
+		} else {
+			return fmt.Errorf("patients cannot join existing sessions")
+		}
+
+	case "doctor":
+		if !isValidDoctorToken(doctorToken) {
+			return fmt.Errorf("invalid doctor token")
+		}
+		if session, exists := s.sessions[sessionID]; exists {
+			if session.doctorConn != nil {
+				return fmt.Errorf("session already has a doctor")
+			}
+			session.doctorConn = conn
+		} else {
+			return fmt.Errorf("session not found")
+		}
+
+	default:
+		return fmt.Errorf("invalid role: %s", role)
+	}
+
+	return nil
+}
+
+func (s *WebSocketServer) handleDisconnect(conn *Connection) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if session, exists := s.sessions[conn.sessionID]; exists {
+		switch conn.role {
+		case "patient":
+			if session.patientConn == conn {
+				delete(s.sessions, conn.sessionID)
+			}
+		case "doctor":
+			if session.doctorConn == conn {
+				session.doctorConn = nil
+			}
+		}
+	}
+
+	conn.conn.Close()
+	log.Printf("%s disconnected from session %s", conn.role, conn.sessionID)
+}
+
+func (s *WebSocketServer) broadcastToRole(sessionID, targetRole string, msg *pb.WebSocketMessage) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Marshal message once
+	log.Printf("Looking for session: %s", sessionID)
+	session, exists := s.sessions[sessionID]
+	if !exists {
+		log.Printf("Session %s not found", sessionID)
+		return
+	}
+
+	var targetConn *Connection
+	switch targetRole {
+	case "patient":
+		targetConn = session.patientConn
+	case "doctor":
+		targetConn = session.doctorConn
+	}
+
+	if targetConn == nil {
+		log.Printf("No %s connected to session %s", targetRole, sessionID)
+		return
+	}
+
+	// Marshal message
 	marshaler := protojson.MarshalOptions{UseProtoNames: true}
 	jsonBytes, err := marshaler.Marshal(msg)
 	if err != nil {
@@ -139,78 +237,18 @@ func (s *WebSocketServer) broadcastToRole(targetRole string, msg *pb.WebSocketMe
 		return
 	}
 
-	recipientCount := 0
-	for conn, info := range s.connections {
-		if info.role == targetRole {
-			recipientCount++
-			if err := conn.WriteMessage(websocket.TextMessage, jsonBytes); err != nil {
-				log.Printf("Error broadcasting to %s: %v", targetRole, err)
-			} else {
-				log.Printf("Successfully sent message to a %s", targetRole)
-			}
-		}
+	if err := targetConn.conn.WriteMessage(websocket.TextMessage, jsonBytes); err != nil {
+		log.Printf("Error broadcasting to %s: %v", targetRole, err)
+	} else {
+		log.Printf("Successfully sent message to %s in session %s", targetRole, sessionID)
 	}
-
-	log.Printf("Found %d recipients for role %s", recipientCount, targetRole)
 }
 
-func handlePatientMessage(s *WebSocketServer, msg *pb.Message) {
-	// Forward patient's question to all doctors
-	s.broadcastToRole("doctor", &pb.WebSocketMessage{
-		Type: pb.MessageType_PATIENT_MESSAGE,
-		Payload: &pb.WebSocketMessage_Message{
-			Message: msg,
-		},
-	})
-
-	// Generate AI draft and send to doctors
-	draftMsg := &pb.WebSocketMessage{
-		Type: pb.MessageType_AI_DRAFT_READY,
-		Payload: &pb.WebSocketMessage_AiDraft{
-			AiDraft: &pb.AIDraftReady{
-				MessageId:       "msg_" + time.Now().String(), // TODO: Generate proper ID
-				OriginalMessage: msg.Content,
-				Draft:           "This is a hardcoded AI draft answer for: " + msg.Content,
-				Timestamp:       timestamppb.Now(),
-			},
-		},
-	}
-	s.broadcastToRole("doctor", draftMsg)
+func generateSessionID() string {
+	return fmt.Sprintf("session_%d", time.Now().UnixNano())
 }
 
-func handleDoctorMessage(s *WebSocketServer, msg *pb.Message) {
-	// Forward doctor's message to all patients
-	s.broadcastToRole("patient", &pb.WebSocketMessage{
-		Type: pb.MessageType_DOCTOR_MESSAGE,
-		Payload: &pb.WebSocketMessage_Message{
-			Message: msg,
-		},
-	})
-}
-
-func handleDraftReview(s *WebSocketServer, review *pb.DraftReview) {
-	switch review.Action {
-	case pb.ReviewAction_ACCEPT, pb.ReviewAction_MODIFY:
-		// Send accepted or modified draft as a doctor message to patients
-		s.broadcastToRole("patient", &pb.WebSocketMessage{
-			Type: pb.MessageType_DOCTOR_MESSAGE,
-			Payload: &pb.WebSocketMessage_Message{
-				Message: &pb.Message{
-					Content:   review.Content,
-					Timestamp: timestamppb.Now(),
-				},
-			},
-		})
-	case pb.ReviewAction_REJECT:
-		// For rejected drafts, doctor should send a separate message
-		// No automatic message is sent here
-	}
-
-	// TODO: Save review action and content to database
-	// This could include:
-	// - Original question
-	// - AI draft
-	// - Review action
-	// - Final content
-	// - Timestamps
+func isValidDoctorToken(token string) bool {
+	// TODO: Implement proper token validation
+	return token != ""
 }
