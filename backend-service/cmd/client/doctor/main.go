@@ -2,230 +2,117 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
-	pb "llm-qa-system/backend-service/src/proto"
 	"log"
+	"net/url"
 	"os"
+	"os/signal"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/gorilla/websocket"
 )
 
-type DoctorClient struct {
-	stream       pb.MedicalChatService_ChatStreamClient
-	chatID       []byte
-	doctorID     []byte
-	currentDraft *pb.AIDraft
-}
-
-func NewDoctorClient(stream pb.MedicalChatService_ChatStreamClient, chatID, doctorID []byte) *DoctorClient {
-	return &DoctorClient{
-		stream:   stream,
-		chatID:   chatID,
-		doctorID: doctorID,
-	}
-}
-
-// Helper function to format UUID bytes to string
-func formatUUID(bytes []byte) string {
-	if len(bytes) != 16 {
-		return "invalid-uuid"
-	}
-	uuid := [16]byte{}
-	copy(uuid[:], bytes)
-	return fmt.Sprintf("%x-%x-%x-%x-%x",
-		uuid[0:4],
-		uuid[4:6],
-		uuid[6:8],
-		uuid[8:10],
-		uuid[10:16])
-}
-
-// Helper function to format chat response
-func formatResponse(resp *pb.ChatResponse) string {
-	var msgContent string
-	switch payload := resp.Payload.(type) {
-	case *pb.ChatResponse_Message:
-		senderID := formatUUID(payload.Message.SenderId.Value)
-		role := payload.Message.Role.String()
-		msgContent = fmt.Sprintf("[%s][%s]: %s", role, senderID, payload.Message.Content)
-	case *pb.ChatResponse_AiDraft:
-		msgContent = fmt.Sprintf("[AI DRAFT] Confidence: %.2f\nContent: %s",
-			payload.AiDraft.ConfidenceScore,
-			payload.AiDraft.Content)
-	case *pb.ChatResponse_Review:
-		msgContent = fmt.Sprintf("[REVIEW] Status: %s\nContent: %s",
-			payload.Review.Status.String(),
-			payload.Review.ModifiedContent)
-	}
-
-	timestamp := time.Unix(resp.Timestamp.Seconds, int64(resp.Timestamp.Nanos))
-	return fmt.Sprintf("\n=== Message at %s ===\n%s\n",
-		timestamp.Format("2006-01-02 15:04:05"),
-		msgContent)
-}
-
-func (c *DoctorClient) handleReview(parts []string) error {
-	if c.currentDraft == nil {
-		fmt.Println("No AI draft available for review")
-		return nil
-	}
-
-	if len(parts) < 2 {
-		fmt.Println("Usage: review <approve|reject|modify> [content]")
-		return nil
-	}
-
-	var status pb.ReviewStatus
-	var content string
-
-	switch parts[1] {
-	case "approve":
-		status = pb.ReviewStatus_APPROVED
-		content = c.currentDraft.Content
-	case "reject":
-		status = pb.ReviewStatus_REJECTED
-	case "modify":
-		if len(parts) < 3 {
-			fmt.Println("Usage: review modify <content>")
-			return nil
-		}
-		status = pb.ReviewStatus_MODIFIED
-		content = strings.Join(parts[2:], " ")
-	default:
-		fmt.Println("Invalid review status")
-		return nil
-	}
-
-	review := map[string]interface{}{
-		"status":  status,
-		"content": content,
-	}
-	reviewContent, _ := json.Marshal(review)
-
-	err := c.stream.Send(&pb.ChatRequest{
-		ChatId:   &pb.UUID{Value: c.chatID},
-		SenderId: &pb.UUID{Value: c.doctorID},
-		Content:  string(reviewContent),
-		Type:     pb.RequestType_SUBMIT_REVIEW,
-		Role:     pb.Role_ROLE_DOCTOR,
-	})
-
-	if err == nil {
-		c.currentDraft = nil // Clear the draft after review
-	}
-	return err
+type Message struct {
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
 }
 
 func main() {
-	serverAddr := "localhost:50052"
-	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Connect to WebSocket server
+	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws"}
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+		log.Fatal("dial:", err)
 	}
-	defer conn.Close()
+	defer c.Close()
 
-	client := pb.NewMedicalChatServiceClient(conn)
-	stream, err := client.ChatStream(context.Background())
-	if err != nil {
-		log.Fatalf("Failed to create stream: %v", err)
-	}
-
-	// Create a buffered reader for chat ID input
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter chat ID to join: ")
-	chatIDStr, _ := reader.ReadString('\n')
-	chatIDStr = strings.TrimSpace(chatIDStr)
-
-	chatID, err := uuid.Parse(chatIDStr)
-	if err != nil {
-		log.Fatalf("Invalid chat ID: %v", err)
-	}
-
-	doctorID := uuid.New()
-
-	// Create doctor client
-	doctorClient := NewDoctorClient(stream, chatID[:], doctorID[:])
-
-	// Join chat
-	err = stream.Send(&pb.ChatRequest{
-		ChatId:   &pb.UUID{Value: doctorClient.chatID},
-		SenderId: &pb.UUID{Value: doctorClient.doctorID},
-		Type:     pb.RequestType_JOIN_CHAT,
-		Role:     pb.Role_ROLE_DOCTOR,
-	})
-	if err != nil {
-		log.Fatalf("Failed to join chat: %v", err)
-	}
-
-	fmt.Printf("Joined chat as doctor with ID: %s\n", doctorID.String())
-
-	// Start goroutine to receive messages
+	// Handle incoming messages
 	go func() {
 		for {
-			resp, err := stream.Recv()
+			var msg Message
+			err := c.ReadJSON(&msg)
 			if err != nil {
-				log.Printf("Stream closed: %v", err)
-				os.Exit(1)
+				log.Println("read:", err)
+				return
 			}
 
-			// Update current draft if received
-			if aiDraft := resp.GetAiDraft(); aiDraft != nil {
-				doctorClient.currentDraft = aiDraft
-				fmt.Println("\n=== New AI Draft Received ===")
-				fmt.Println("Use 'review <approve|reject|modify> [content]' to review")
-			}
+			switch msg.Type {
+			case "NEW_QUESTION":
+				var payload struct {
+					Content string `json:"content"`
+				}
+				json.Unmarshal(msg.Payload, &payload)
+				fmt.Printf("\nNew patient question: %s\n", payload.Content)
 
-			fmt.Print(formatResponse(resp))
+			case "AI_DRAFT_READY":
+				var payload struct {
+					Question string `json:"question"`
+					Draft    string `json:"draft"`
+				}
+				json.Unmarshal(msg.Payload, &payload)
+				fmt.Printf("\nAI Draft ready for question: %s\nDraft: %s\n", payload.Question, payload.Draft)
+				fmt.Println("Use 'review <accept|modify|reject> [modified_content]' to review")
+			}
 		}
 	}()
 
+	// Handle user input
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Commands:")
-	fmt.Println("  review <approve|reject|modify> [content] - Review AI draft (only available when draft exists)")
-	fmt.Println("  send <message> - Send a message")
-	fmt.Println("Type your commands (press Ctrl+C to quit):")
+	fmt.Println("  review <accept|modify|reject> [content] - Review AI draft")
+	fmt.Println("  send <message> - Send a regular message")
+
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
 
 	for {
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			log.Printf("Error reading input: %v", err)
-			continue
-		}
-
+		fmt.Print("> ")
+		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-
 		parts := strings.SplitN(input, " ", 3)
 
 		switch parts[0] {
 		case "review":
-			err = doctorClient.handleReview(parts)
+			if len(parts) < 2 {
+				fmt.Println("Usage: review <accept|modify|reject> [content]")
+				continue
+			}
+
+			msg := Message{
+				Type: "DOCTOR_REVIEW",
+			}
+
+			review := struct {
+				Action          string `json:"action"`
+				ModifiedContent string `json:"modified_content,omitempty"`
+			}{
+				Action: parts[1],
+			}
+
+			if parts[1] == "modify" || parts[1] == "reject" {
+				if len(parts) < 3 {
+					fmt.Println("Content required for modify/reject")
+					continue
+				}
+				review.ModifiedContent = parts[2]
+			}
+
+			payload, _ := json.Marshal(review)
+			msg.Payload = payload
+			c.WriteJSON(msg)
+
 		case "send":
 			if len(parts) < 2 {
 				fmt.Println("Usage: send <message>")
 				continue
 			}
-			message := strings.Join(parts[1:], " ")
-			err = stream.Send(&pb.ChatRequest{
-				ChatId:   &pb.UUID{Value: doctorClient.chatID},
-				SenderId: &pb.UUID{Value: doctorClient.doctorID},
-				Content:  message,
-				Type:     pb.RequestType_SEND_MESSAGE,
-				Role:     pb.Role_ROLE_DOCTOR,
-			})
-		default:
-			fmt.Println("Unknown command. Available commands: review, send")
-		}
-
-		if err != nil {
-			log.Printf("Failed to send: %v", err)
+			msg := Message{
+				Type: "DOCTOR_MESSAGE",
+				Payload: json.RawMessage(fmt.Sprintf(`{"content":%q}`,
+					strings.Join(parts[1:], " "))),
+			}
+			c.WriteJSON(msg)
 		}
 	}
 }

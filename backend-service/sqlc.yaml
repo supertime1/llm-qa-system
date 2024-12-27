@@ -4,7 +4,6 @@ sql:
     queries: "src/db/query/queries.sql"
     schema:
       - "src/db/schema/001_initial_schema.sql"
-      - "src/db/schema/002_add_patient_context.sql"
     gen:
       go:
         package: "db"

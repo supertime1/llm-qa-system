@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x15medical_service.proto\x12\x07\x62\x61\x63kend\x1a\x1fgoogle/protobuf/timestamp.proto\"\x15\n\x04UUID\x12\r\n\x05value\x18\x01 \x01(\x0c\"\xa1\x01\n\x0b\x43hatRequest\x12\x1e\n\x07\x63hat_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12 \n\tsender_id\x18\x02 \x01(\x0b\x32\r.backend.UUID\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x1b\n\x04role\x18\x04 \x01(\x0e\x32\r.backend.Role\x12\"\n\x04type\x18\x05 \x01(\x0e\x32\x14.backend.RequestType\"\x81\x02\n\x0c\x43hatResponse\x12\x1e\n\x07\x63hat_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12#\n\x04type\x18\x02 \x01(\x0e\x32\x15.backend.ResponseType\x12#\n\x07message\x18\x03 \x01(\x0b\x32\x10.backend.MessageH\x00\x12$\n\x08\x61i_draft\x18\x04 \x01(\x0b\x32\x10.backend.AIDraftH\x00\x12\'\n\x06review\x18\x05 \x01(\x0b\x32\x15.backend.ReviewUpdateH\x00\x12-\n\ttimestamp\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\t\n\x07payload\"Y\n\x07Message\x12 \n\tsender_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x1b\n\x04role\x18\x03 \x01(\x0e\x32\r.backend.Role\"4\n\x07\x41IDraft\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x18\n\x10\x63onfidence_score\x18\x02 \x01(\x02\"O\n\x0cReviewUpdate\x12%\n\x06status\x18\x01 \x01(\x0e\x32\x15.backend.ReviewStatus\x12\x18\n\x10modified_content\x18\x02 \x01(\t\"x\n\x0fQuestionRequest\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12*\n\x0cuser_context\x18\x03 \x01(\x0b\x32\x14.backend.UserContext\"\x8f\x01\n\x0bUserContext\x12$\n\tuser_info\x18\x01 \x01(\x0b\x32\x11.backend.UserInfo\x12.\n\x0e\x62iometric_data\x18\x02 \x03(\x0b\x32\x16.backend.BiometricData\x12*\n\x0c\x63hat_history\x18\x03 \x03(\x0b\x32\x14.backend.ChatMessage\"@\n\x08UserInfo\x12\x0b\n\x03\x61ge\x18\x01 \x01(\t\x12\x0e\n\x06gender\x18\x02 \x01(\t\x12\x17\n\x0fmedical_history\x18\x03 \x03(\t\"[\n\rBiometricData\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"[\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"z\n\x10QuestionResponse\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x12\n\nreferences\x18\x03 \x03(\t\x12\x18\n\x10\x63onfidence_score\x18\x04 \x01(\x02*L\n\x04Role\x12\x10\n\x0cROLE_UNKNOWN\x10\x00\x12\x10\n\x0cROLE_PATIENT\x10\x01\x12\x0f\n\x0bROLE_DOCTOR\x10\x02\x12\x0f\n\x0bROLE_SYSTEM\x10\x03*f\n\x0bRequestType\x12\x13\n\x0fREQUEST_UNKNOWN\x10\x00\x12\x10\n\x0cSEND_MESSAGE\x10\x01\x12\x0e\n\nSTART_CHAT\x10\x02\x12\r\n\tJOIN_CHAT\x10\x03\x12\x11\n\rSUBMIT_REVIEW\x10\x04*{\n\x0cResponseType\x12\x14\n\x10RESPONSE_UNKNOWN\x10\x00\x12\x0f\n\x0bNEW_MESSAGE\x10\x01\x12\x12\n\x0e\x41I_DRAFT_READY\x10\x02\x12\x14\n\x10\x44OCTOR_REVIEWING\x10\x03\x12\x0f\n\x0bREVIEW_DONE\x10\x04\x12\t\n\x05\x45RROR\x10\x05*L\n\x0cReviewStatus\x12\x12\n\x0eREVIEW_UNKNOWN\x10\x00\x12\x0c\n\x08\x41PPROVED\x10\x01\x12\x0c\n\x08MODIFIED\x10\x02\x12\x0c\n\x08REJECTED\x10\x03\x32U\n\x12MedicalChatService\x12?\n\nChatStream\x12\x14.backend.ChatRequest\x1a\x15.backend.ChatResponse\"\x00(\x01\x30\x01\x32`\n\x10MedicalQAService\x12L\n\x13GenerateDraftAnswer\x12\x18.backend.QuestionRequest\x1a\x19.backend.QuestionResponse\"\x00\x42?Z=github.com/supertime1/llm-qa-system/backend-service/src/protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x15medical_service.proto\x12\x07\x62\x61\x63kend\x1a\x1fgoogle/protobuf/timestamp.proto\"\x15\n\x04UUID\x12\r\n\x05value\x18\x01 \x01(\x0c\"x\n\x0fQuestionRequest\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12*\n\x0cuser_context\x18\x03 \x01(\x0b\x32\x14.backend.UserContext\"\x8f\x01\n\x0bUserContext\x12$\n\tuser_info\x18\x01 \x01(\x0b\x32\x11.backend.UserInfo\x12.\n\x0e\x62iometric_data\x18\x02 \x03(\x0b\x32\x16.backend.BiometricData\x12*\n\x0c\x63hat_history\x18\x03 \x03(\x0b\x32\x14.backend.ChatMessage\"Q\n\x08UserInfo\x12\x0b\n\x03\x61ge\x18\x01 \x01(\t\x12\x1f\n\x06gender\x18\x02 \x01(\x0e\x32\x0f.backend.Gender\x12\x17\n\x0fmedical_history\x18\x03 \x03(\t\"s\n\rBiometricData\x12$\n\x04type\x18\x01 \x01(\x0e\x32\x16.backend.BiometricType\x12\r\n\x05value\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"j\n\x0b\x43hatMessage\x12\x1b\n\x04role\x18\x01 \x01(\x0e\x32\r.backend.Role\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"z\n\x10QuestionResponse\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x12\n\nreferences\x18\x03 \x03(\t\x12\x18\n\x10\x63onfidence_score\x18\x04 \x01(\x02*L\n\x04Role\x12\x10\n\x0cROLE_UNKNOWN\x10\x00\x12\x10\n\x0cROLE_PATIENT\x10\x01\x12\x0f\n\x0bROLE_DOCTOR\x10\x02\x12\x0f\n\x0bROLE_SYSTEM\x10\x03*@\n\x06Gender\x12\x12\n\x0eGENDER_UNKNOWN\x10\x00\x12\x0f\n\x0bGENDER_MALE\x10\x01\x12\x11\n\rGENDER_FEMALE\x10\x02*z\n\rBiometricType\x12\x15\n\x11\x42IOMETRIC_UNKNOWN\x10\x00\x12\x18\n\x14\x42IOMETRIC_HEART_RATE\x10\x01\x12\x1a\n\x16\x42IOMETRIC_BLOOD_OXYGEN\x10\x02\x12\x1c\n\x18\x42IOMETRIC_BLOOD_PRESSURE\x10\x03\x32`\n\x10MedicalQAService\x12L\n\x13GenerateDraftAnswer\x12\x18.backend.QuestionRequest\x1a\x19.backend.QuestionResponse\"\x00\x42?Z=github.com/supertime1/llm-qa-system/backend-service/src/protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -22,40 +22,26 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'medical_service_pb2', _glob
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
   DESCRIPTOR._serialized_options = b'Z=github.com/supertime1/llm-qa-system/backend-service/src/proto'
-  _globals['_ROLE']._serialized_start=1384
-  _globals['_ROLE']._serialized_end=1460
-  _globals['_REQUESTTYPE']._serialized_start=1462
-  _globals['_REQUESTTYPE']._serialized_end=1564
-  _globals['_RESPONSETYPE']._serialized_start=1566
-  _globals['_RESPONSETYPE']._serialized_end=1689
-  _globals['_REVIEWSTATUS']._serialized_start=1691
-  _globals['_REVIEWSTATUS']._serialized_end=1767
+  _globals['_ROLE']._serialized_start=790
+  _globals['_ROLE']._serialized_end=866
+  _globals['_GENDER']._serialized_start=868
+  _globals['_GENDER']._serialized_end=932
+  _globals['_BIOMETRICTYPE']._serialized_start=934
+  _globals['_BIOMETRICTYPE']._serialized_end=1056
   _globals['_UUID']._serialized_start=67
   _globals['_UUID']._serialized_end=88
-  _globals['_CHATREQUEST']._serialized_start=91
-  _globals['_CHATREQUEST']._serialized_end=252
-  _globals['_CHATRESPONSE']._serialized_start=255
-  _globals['_CHATRESPONSE']._serialized_end=512
-  _globals['_MESSAGE']._serialized_start=514
-  _globals['_MESSAGE']._serialized_end=603
-  _globals['_AIDRAFT']._serialized_start=605
-  _globals['_AIDRAFT']._serialized_end=657
-  _globals['_REVIEWUPDATE']._serialized_start=659
-  _globals['_REVIEWUPDATE']._serialized_end=738
-  _globals['_QUESTIONREQUEST']._serialized_start=740
-  _globals['_QUESTIONREQUEST']._serialized_end=860
-  _globals['_USERCONTEXT']._serialized_start=863
-  _globals['_USERCONTEXT']._serialized_end=1006
-  _globals['_USERINFO']._serialized_start=1008
-  _globals['_USERINFO']._serialized_end=1072
-  _globals['_BIOMETRICDATA']._serialized_start=1074
-  _globals['_BIOMETRICDATA']._serialized_end=1165
-  _globals['_CHATMESSAGE']._serialized_start=1167
-  _globals['_CHATMESSAGE']._serialized_end=1258
-  _globals['_QUESTIONRESPONSE']._serialized_start=1260
-  _globals['_QUESTIONRESPONSE']._serialized_end=1382
-  _globals['_MEDICALCHATSERVICE']._serialized_start=1769
-  _globals['_MEDICALCHATSERVICE']._serialized_end=1854
-  _globals['_MEDICALQASERVICE']._serialized_start=1856
-  _globals['_MEDICALQASERVICE']._serialized_end=1952
+  _globals['_QUESTIONREQUEST']._serialized_start=90
+  _globals['_QUESTIONREQUEST']._serialized_end=210
+  _globals['_USERCONTEXT']._serialized_start=213
+  _globals['_USERCONTEXT']._serialized_end=356
+  _globals['_USERINFO']._serialized_start=358
+  _globals['_USERINFO']._serialized_end=439
+  _globals['_BIOMETRICDATA']._serialized_start=441
+  _globals['_BIOMETRICDATA']._serialized_end=556
+  _globals['_CHATMESSAGE']._serialized_start=558
+  _globals['_CHATMESSAGE']._serialized_end=664
+  _globals['_QUESTIONRESPONSE']._serialized_start=666
+  _globals['_QUESTIONRESPONSE']._serialized_end=788
+  _globals['_MEDICALQASERVICE']._serialized_start=1058
+  _globals['_MEDICALQASERVICE']._serialized_end=1154
 # @@protoc_insertion_point(module_scope)

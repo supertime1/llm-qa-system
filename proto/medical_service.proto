@@ -10,53 +10,10 @@ message UUID {
     bytes value = 1;
 }
 
-// Main Chat Service
-service MedicalChatService {
-    // Bidirectional streaming for real-time chat
-    rpc ChatStream(stream ChatRequest) returns (stream ChatResponse) {}
-}
-
 // Main QA service definition
 service MedicalQAService {
     // Generate a draft answer for medical questions
     rpc GenerateDraftAnswer (QuestionRequest) returns (QuestionResponse) {}
-}
-
-// Request from client (patient/doctor)
-message ChatRequest {
-    UUID chat_id = 1;          // UUID of the chat session
-    UUID sender_id = 2;        // UUID of sender (patient/doctor)
-    string content = 3;          // Message content
-    Role role = 4;              // Role of sender
-    RequestType type = 5;        // Type of request
-}
-
-// Response to clients
-message ChatResponse {
-    UUID chat_id = 1;
-    ResponseType type = 2;       // Type of response
-    oneof payload {
-        Message message = 3;     // Regular chat message
-        AIDraft ai_draft = 4;    // AI generated draft
-        ReviewUpdate review = 5; // Doctor review status
-    }
-    google.protobuf.Timestamp timestamp = 6;
-}
-
-message Message {
-    UUID sender_id = 1;
-    string content = 2;
-    Role role = 3;
-}
-
-message AIDraft {
-    string content = 1;
-    float confidence_score = 2;
-}
-
-message ReviewUpdate {
-    ReviewStatus status = 1;
-    string modified_content = 2;  // If doctor modifies the answer
 }
 
 enum Role {
@@ -66,30 +23,18 @@ enum Role {
     ROLE_SYSTEM = 3;
 }
 
-enum RequestType {
-    REQUEST_UNKNOWN = 0;
-    SEND_MESSAGE = 1;      // Regular chat message
-    START_CHAT = 2;        // Start new chat session
-    JOIN_CHAT = 3;        // Doctor joining chat
-    SUBMIT_REVIEW = 4;    // Doctor submitting review
+enum Gender {
+    GENDER_UNKNOWN = 0;
+    GENDER_MALE = 1;
+    GENDER_FEMALE = 2;
 }
 
-enum ResponseType {
-    RESPONSE_UNKNOWN = 0;
-    NEW_MESSAGE = 1;      // New chat message
-    AI_DRAFT_READY = 2;   // AI draft is ready
-    DOCTOR_REVIEWING = 3; // Doctor is reviewing
-    REVIEW_DONE = 4;      // Final answer ready
-    ERROR = 5;           // Error occurred
+enum BiometricType {
+    BIOMETRIC_UNKNOWN = 0;
+    BIOMETRIC_HEART_RATE = 1;
+    BIOMETRIC_BLOOD_OXYGEN = 2;
+    BIOMETRIC_BLOOD_PRESSURE = 3;
 }
-
-enum ReviewStatus {
-    REVIEW_UNKNOWN = 0;
-    APPROVED = 1;        // AI draft approved as-is
-    MODIFIED = 2;        // AI draft modified
-    REJECTED = 3;        // AI draft rejected with new answer
-}
-
 
 message QuestionRequest {
     UUID question_id = 1;
@@ -105,18 +50,18 @@ message UserContext {
 
 message UserInfo {
     string age = 1;
-    string gender = 2;
+    Gender gender = 2;
     repeated string medical_history = 3;
 }
 
 message BiometricData {
-    string type = 1;
+    BiometricType type = 1;
     string value = 2;
     google.protobuf.Timestamp timestamp = 3;
 }
 
 message ChatMessage {
-    string role = 1;
+    Role role = 1;
     string content = 2;
     google.protobuf.Timestamp timestamp = 3;
 }

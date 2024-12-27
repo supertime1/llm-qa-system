@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
-
-	pb "llm-qa-system/backend-service/src/proto"
+	"log"
+	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -13,13 +13,13 @@ import (
 )
 
 type ServerGroup struct {
-	chatServer   *ChatServer
+	wsServer     *WebSocketServer
 	healthServer *HealthServer
 	db           *pgxpool.Pool
+	httpServer   *http.Server
 }
 
 func NewServerGroup(pool *pgxpool.Pool, llmServiceAddr string, redisAddr string) (*ServerGroup, error) {
-
 	baseServer := NewBaseServer(pool)
 
 	// Create LLM client
@@ -28,31 +28,55 @@ func NewServerGroup(pool *pgxpool.Pool, llmServiceAddr string, redisAddr string)
 		return nil, err
 	}
 
-	// Create chat server
-	chatServer, err := NewChatServer(baseServer, llmClient, redisAddr)
-	if err != nil {
-		return nil, err
+	// Create WebSocket server
+	wsServer := NewWebSocketServer(baseServer, llmClient)
+
+	// Create HTTP server
+	mux := http.NewServeMux()
+	httpServer := &http.Server{
+		Addr:    ":8080", // You might want to make this configurable
+		Handler: mux,
 	}
 
-	return &ServerGroup{
+	sg := &ServerGroup{
 		db:           pool,
-		chatServer:   chatServer,
+		wsServer:     wsServer,
 		healthServer: newHealthServer(pool),
-	}, nil
+		httpServer:   httpServer,
+	}
+
+	// Set up WebSocket route
+	mux.HandleFunc("/ws", wsServer.HandleWebSocket)
+
+	return sg, nil
 }
 
 func (s *ServerGroup) Register(grpcServer *grpc.Server) {
-	pb.RegisterMedicalChatServiceServer(grpcServer, s.chatServer) // Add this
 	healthpb.RegisterHealthServer(grpcServer, s.healthServer)
 	reflection.Register(grpcServer)
 }
 
 func (s *ServerGroup) Start(ctx context.Context) error {
-	return nil
+	// Start HTTP server in a goroutine
+	go func() {
+		log.Printf("Starting HTTP server on %s", s.httpServer.Addr)
+		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("HTTP server error: %v", err)
+		}
+	}()
+
+	// Wait for context cancellation
+	<-ctx.Done()
+	return s.httpServer.Shutdown(context.Background())
 }
 
 func (s *ServerGroup) Stop() {
-	// Cleanup resources
+	// Shutdown HTTP server
+	if err := s.httpServer.Shutdown(context.Background()); err != nil {
+		log.Printf("HTTP server shutdown error: %v", err)
+	}
+
+	// Cleanup database connection
 	if s.db != nil {
 		s.db.Close()
 	}

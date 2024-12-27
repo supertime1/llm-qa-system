@@ -4,13 +4,11 @@ import (
 	"context"
 	"llm-qa-system/backend-service/server"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"google.golang.org/grpc"
 )
 
 func getEnvOrDefault(key, defaultValue string) string {
@@ -25,7 +23,6 @@ func main() {
 
 	// Get configuration from environment variables
 	dbURL := getEnvOrDefault("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/medical_chat")
-	serverPort := getEnvOrDefault("SERVER_PORT", "50052")
 	llmServiceAddr := getEnvOrDefault("LLM_SERVICE_ADDR", "localhost:50051")
 	redisAddr := getEnvOrDefault("REDIS_ADDR", "localhost:6379")
 
@@ -42,15 +39,9 @@ func main() {
 		log.Fatalf("Failed to create server group: %v", err)
 	}
 
-	// Create gRPC server
-	grpcServer := grpc.NewServer()
-	serverGroup.Register(grpcServer)
-
-	// Start listening
-	lis, err := net.Listen("tcp", ":"+serverPort)
-	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
-	}
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Handle shutdown gracefully
 	go func() {
@@ -59,13 +50,12 @@ func main() {
 		<-sigCh
 
 		log.Println("Shutting down gracefully...")
-		serverGroup.Stop()
-		grpcServer.GracefulStop()
+		cancel()
 	}()
 
 	// Start server
-	log.Printf("Server listening at %v", lis.Addr())
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+	log.Printf("Server starting on :8080")
+	if err := serverGroup.Start(ctx); err != nil {
+		log.Fatalf("Server error: %v", err)
 	}
 }
