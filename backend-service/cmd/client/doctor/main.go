@@ -2,76 +2,103 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"strings"
+	"time"
+
+	pb "llm-qa-system/backend-service/src/proto"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type Message struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
-}
-
 func main() {
-	// Connect to WebSocket server
-	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws", RawQuery: "role=doctor"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
 	defer c.Close()
 
+	interrupt := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	signal.Notify(interrupt, os.Interrupt)
+
+	go func() {
+		<-interrupt
+		log.Println("\nReceived interrupt signal, closing connection...")
+		err := c.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		if err != nil {
+			log.Printf("Error during closing websocket: %v", err)
+		}
+		close(done)
+		os.Exit(0)
+	}()
+
+	// Set up ping handler
+	c.SetPingHandler(func(string) error {
+		err := c.WriteControl(websocket.PongMessage, []byte{}, time.Now().Add(time.Second*10))
+		if err != nil {
+			log.Printf("Error sending pong: %v", err)
+		}
+		return nil
+	})
+
 	// Handle incoming messages
 	go func() {
 		for {
-			var msg Message
-			err := c.ReadJSON(&msg)
-			if err != nil {
-				log.Println("read:", err)
+			var msg map[string]interface{}
+			if err := c.ReadJSON(&msg); err != nil {
+				log.Printf("read error: %v", err)
 				return
 			}
 
-			switch msg.Type {
-			case "NEW_QUESTION":
-				var payload struct {
-					Content string `json:"content"`
-				}
-				json.Unmarshal(msg.Payload, &payload)
-				fmt.Printf("\nNew patient question: %s\n", payload.Content)
+			msgType, _ := msg["type"].(float64)
 
-			case "AI_DRAFT_READY":
-				var payload struct {
-					Question string `json:"question"`
-					Draft    string `json:"draft"`
+			switch int32(msgType) {
+			case int32(pb.MessageType_PATIENT_MESSAGE):
+				if message, ok := msg["message"].(map[string]interface{}); ok {
+					if content, ok := message["content"].(string); ok {
+						fmt.Printf("\nPatient: %s\n", content)
+						fmt.Print("> ")
+					}
 				}
-				json.Unmarshal(msg.Payload, &payload)
-				fmt.Printf("\nAI Draft ready for question: %s\nDraft: %s\n", payload.Question, payload.Draft)
-				fmt.Println("Use 'review <accept|modify|reject> [modified_content]' to review")
+			case int32(pb.MessageType_AI_DRAFT_READY):
+				if draft, ok := msg["ai_draft"].(map[string]interface{}); ok {
+					fmt.Printf("\nAI Draft for question '%s':\n%s\n",
+						draft["original_message"], draft["draft"])
+					fmt.Println("Use 'review <accept|modify|reject> [content]' to review")
+					fmt.Print("> ")
+				}
 			}
 		}
 	}()
 
-	// Handle user input
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Commands:")
 	fmt.Println("  review <accept|modify|reject> [content] - Review AI draft")
-	fmt.Println("  send <message> - Send a regular message")
-
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
+	fmt.Println("  send <message> - Send a message to patient")
+	fmt.Println("Press Ctrl+C to quit")
 
 	for {
 		fmt.Print("> ")
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-		parts := strings.SplitN(input, " ", 3)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("Error reading input: %v", err)
+			continue
+		}
 
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+
+		parts := strings.SplitN(input, " ", 3)
 		switch parts[0] {
 		case "review":
 			if len(parts) < 2 {
@@ -79,40 +106,38 @@ func main() {
 				continue
 			}
 
-			msg := Message{
-				Type: "DOCTOR_REVIEW",
+			msg := map[string]interface{}{
+				"type": pb.MessageType_DRAFT_REVIEW.Number(),
+				"review": map[string]interface{}{
+					"action":    parts[1],
+					"content":   strings.Join(parts[2:], " "),
+					"timestamp": timestamppb.Now(),
+				},
 			}
 
-			review := struct {
-				Action          string `json:"action"`
-				ModifiedContent string `json:"modified_content,omitempty"`
-			}{
-				Action: parts[1],
+			if err := c.WriteJSON(msg); err != nil {
+				log.Printf("Error sending review: %v", err)
+				continue
 			}
-
-			if parts[1] == "modify" || parts[1] == "reject" {
-				if len(parts) < 3 {
-					fmt.Println("Content required for modify/reject")
-					continue
-				}
-				review.ModifiedContent = parts[2]
-			}
-
-			payload, _ := json.Marshal(review)
-			msg.Payload = payload
-			c.WriteJSON(msg)
 
 		case "send":
 			if len(parts) < 2 {
 				fmt.Println("Usage: send <message>")
 				continue
 			}
-			msg := Message{
-				Type: "DOCTOR_MESSAGE",
-				Payload: json.RawMessage(fmt.Sprintf(`{"content":%q}`,
-					strings.Join(parts[1:], " "))),
+
+			msg := map[string]interface{}{
+				"type": pb.MessageType_DOCTOR_MESSAGE.Number(),
+				"message": map[string]interface{}{
+					"content":   strings.Join(parts[1:], " "),
+					"timestamp": timestamppb.Now(),
+				},
 			}
-			c.WriteJSON(msg)
+
+			if err := c.WriteJSON(msg); err != nil {
+				log.Printf("Error sending message: %v", err)
+				continue
+			}
 		}
 	}
 }

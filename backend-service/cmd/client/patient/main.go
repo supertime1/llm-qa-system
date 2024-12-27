@@ -2,48 +2,75 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"strings"
+	"time"
+
+	pb "llm-qa-system/backend-service/src/proto"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-type Message struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
-}
 
 func main() {
 	// Connect to WebSocket server
-	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws", RawQuery: "role=patient"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
 	defer c.Close()
 
+	// Create interrupt and done channels
+	interrupt := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	signal.Notify(interrupt, os.Interrupt)
+
+	// Handle graceful shutdown
+	go func() {
+		<-interrupt
+		log.Println("\nReceived interrupt signal, closing connection...")
+		err := c.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		if err != nil {
+			log.Printf("Error during closing websocket: %v", err)
+		}
+		close(done)
+		os.Exit(0)
+	}()
+
+	// Set up ping handler
+	c.SetPingHandler(func(string) error {
+		err := c.WriteControl(websocket.PongMessage, []byte{}, time.Now().Add(time.Second*10))
+		if err != nil {
+			log.Printf("Error sending pong: %v", err)
+		}
+		return nil
+	})
+
 	// Handle incoming messages
 	go func() {
 		for {
-			var msg Message
-			err := c.ReadJSON(&msg)
-			if err != nil {
-				log.Println("read:", err)
+			var msg map[string]interface{}
+			if err := c.ReadJSON(&msg); err != nil {
+				log.Printf("read error: %v", err)
 				return
 			}
 
-			switch msg.Type {
-			case "NEW_MESSAGE", "ACCEPTED_DRAFT", "MODIFIED_DRAFT", "DOCTOR_ANSWER":
-				var payload struct {
-					Content string `json:"content"`
+			msgType, _ := msg["type"].(float64)
+
+			switch int32(msgType) {
+			case int32(pb.MessageType_DOCTOR_MESSAGE):
+				if message, ok := msg["message"].(map[string]interface{}); ok {
+					if content, ok := message["content"].(string); ok {
+						fmt.Printf("\nDoctor: %s\n", content)
+						fmt.Print("> ")
+					}
 				}
-				json.Unmarshal(msg.Payload, &payload)
-				fmt.Printf("\nDoctor: %s\n", payload.Content)
 			}
 		}
 	}()
@@ -52,20 +79,32 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Type your question (press Ctrl+C to quit):")
 
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-
 	for {
 		fmt.Print("> ")
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("Error reading input: %v", err)
+			continue
+		}
 
-		if input != "" {
-			msg := Message{
-				Type:    "PATIENT_QUESTION",
-				Payload: json.RawMessage(fmt.Sprintf(`{"content":%q}`, input)),
-			}
-			c.WriteJSON(msg)
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+
+		msg := map[string]interface{}{
+			"type": pb.MessageType_PATIENT_MESSAGE.Number(),
+			"message": map[string]interface{}{
+				"content":   input,
+				"timestamp": timestamppb.Now(),
+			},
+		}
+
+		log.Printf("Sending message structure: %+v", msg)
+
+		if err := c.WriteJSON(msg); err != nil {
+			log.Printf("Error sending message: %v", err)
+			continue
 		}
 	}
 }

@@ -73,3 +73,48 @@ message QuestionResponse {
     float confidence_score = 4;
 }
 
+
+// WebSocket message types
+enum MessageType {
+    MESSAGE_TYPE_UNSPECIFIED = 0;
+    PATIENT_MESSAGE = 1;           // Questions and messages between patient and doctor
+    DOCTOR_MESSAGE = 2;           // Questions and messages between patient and doctor
+    AI_DRAFT_READY = 3;    // Server -> Doctor
+    DRAFT_REVIEW = 4;      // Doctor -> Server
+}
+
+enum ReviewAction {
+    REVIEW_ACTION_UNSPECIFIED = 0;
+    ACCEPT = 1;
+    MODIFY = 2;
+    REJECT = 3;
+}
+
+// WebSocket messages
+message WebSocketMessage {
+    MessageType type = 1;
+    oneof payload {
+        Message message = 2;         // For questions and messages
+        AIDraftReady ai_draft = 3;   // For sending AI draft to doctor
+        DraftReview review = 4;      // For doctor's review of AI draft
+    }
+}
+
+message Message {
+    string content = 1;
+    google.protobuf.Timestamp timestamp = 2;
+}
+
+message AIDraftReady {
+    string message_id = 1;
+    string original_message = 2;
+    string draft = 3;
+    google.protobuf.Timestamp timestamp = 4;
+}
+
+message DraftReview {
+    string message_id = 1;
+    ReviewAction action = 2;
+    string content = 3;
+    google.protobuf.Timestamp timestamp = 4;
+}

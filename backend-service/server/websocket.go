@@ -1,22 +1,35 @@
 package server
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
+	"time"
+
+	pb "llm-qa-system/backend-service/src/proto"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+type Connection struct {
+	conn *websocket.Conn
+	role string
+}
 
 type WebSocketServer struct {
 	*BaseServer
-	llmClient *LLMClient
+	llmClient   *LLMClient
+	connections map[*websocket.Conn]*Connection
+	mu          sync.RWMutex
 }
 
 func NewWebSocketServer(base *BaseServer, llmClient *LLMClient) *WebSocketServer {
 	return &WebSocketServer{
-		BaseServer: base,
-		llmClient:  llmClient,
+		BaseServer:  base,
+		llmClient:   llmClient,
+		connections: make(map[*websocket.Conn]*Connection),
+		mu:          sync.RWMutex{},
 	}
 }
 
@@ -28,143 +41,133 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-type WebSocketMessage struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
-}
-
-type PatientMessage struct {
-	Content string `json:"content"`
-}
-
-type DraftReview struct {
-	Action          string `json:"action"` // "accept", "modify", "reject"
-	ModifiedContent string `json:"modified_content,omitempty"`
-}
-
 func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Failed to upgrade connection: %v", err)
 		return
 	}
-	defer conn.Close()
+
+	role := r.URL.Query().Get("role")
+	log.Printf("New %s connected", role)
+
+	s.mu.Lock()
+	s.connections[conn] = &Connection{conn: conn, role: role}
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		delete(s.connections, conn)
+		s.mu.Unlock()
+		conn.Close()
+		log.Printf("%s disconnected", role)
+	}()
 
 	for {
-		var wsMsg WebSocketMessage
-		if err := conn.ReadJSON(&wsMsg); err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
-			}
+		var msg map[string]interface{}
+		if err := conn.ReadJSON(&msg); err != nil {
+			log.Printf("ReadJSON error from %s: %v", role, err)
 			break
 		}
 
-		switch wsMsg.Type {
-		// case "PATIENT_QUESTION":
-		// 	var msg PatientMessage
-		// 	if err := json.Unmarshal(wsMsg.Payload, &msg); err != nil {
-		// 		continue
-		// 	}
+		log.Printf("Received raw message from %s: %+v", role, msg)
 
-		// 	// Forward question to doctor immediately
-		// 	s.sendResponse(conn, "NEW_QUESTION", map[string]string{
-		// 		"content": msg.Content,
-		// 	})
+		msgType, ok := msg["type"].(float64)
+		if !ok {
+			log.Printf("Invalid message type from %s: %+v", role, msg["type"])
+			continue
+		}
 
-		// 	// Generate AI draft using LLM service
-		// 	draftResp, err := s.llmClient.GenerateDraftAnswer(r.Context(), &pb.QuestionRequest{
-		// 		QuestionText: msg.Content,
-		// 	})
-		// 	if err != nil {
-		// 		s.sendErrorResponse(conn, "Failed to generate draft")
-		// 		continue
-		// 	}
+		switch int32(msgType) {
+		case int32(pb.MessageType_PATIENT_MESSAGE):
+			log.Printf("Broadcasting patient message to doctors")
+			s.broadcastToRole("doctor", msg)
 
-		// 	// Send draft to doctor for review
-		// 	s.sendResponse(conn, "AI_DRAFT_READY", map[string]interface{}{
-		// 		"question": msg.Content,
-		// 		"draft":    draftResp.DraftAnswer,
-		// 	})
-		case "PATIENT_QUESTION":
-			var msg PatientMessage
-			if err := json.Unmarshal(wsMsg.Payload, &msg); err != nil {
-				continue
-			}
-
-			// Forward question to doctor immediately
-			s.sendResponse(conn, "NEW_QUESTION", map[string]string{
-				"content": msg.Content,
-			})
-
-			// Simulate LLM response for now
-			// TODO: Replace with actual async LLM call + message queue
-			draftAnswer := "This is a hardcoded AI draft answer for: " + msg.Content
-
-			// Send draft to doctor for review
-			s.sendResponse(conn, "AI_DRAFT_READY", map[string]interface{}{
-				"question": msg.Content,
-				"draft":    draftAnswer,
-			})
-
-		case "DOCTOR_REVIEW":
-			var review DraftReview
-			if err := json.Unmarshal(wsMsg.Payload, &review); err != nil {
-				continue
-			}
-
-			var responseType string
-			var content string
-
-			switch review.Action {
-			case "accept":
-				responseType = "ACCEPTED_DRAFT"
-				content = review.ModifiedContent // Original draft content
-			case "modify":
-				responseType = "MODIFIED_DRAFT"
-				content = review.ModifiedContent // Modified draft content
-			case "reject":
-				responseType = "DOCTOR_ANSWER"
-				content = review.ModifiedContent // Doctor's new answer
-			}
-
-			// Send final answer to patient
-			s.sendResponse(conn, responseType, map[string]string{
-				"content": content,
-			})
-
-		case "DOCTOR_MESSAGE":
-			var msg PatientMessage
-			if err := json.Unmarshal(wsMsg.Payload, &msg); err != nil {
-				continue
-			}
-
-			// Forward regular doctor message to patient
-			s.sendResponse(conn, "NEW_MESSAGE", map[string]string{
-				"content": msg.Content,
-			})
+		case int32(pb.MessageType_DOCTOR_MESSAGE):
+			log.Printf("Broadcasting doctor message to patients")
+			s.broadcastToRole("patient", msg)
 		}
 	}
 }
 
-func (s *WebSocketServer) sendResponse(conn *websocket.Conn, msgType string, payload interface{}) {
-	response := WebSocketMessage{
-		Type:    msgType,
-		Payload: marshal(payload),
+func (s *WebSocketServer) broadcastToRole(targetRole string, msg interface{}) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	log.Printf("Broadcasting message to role %s: %+v", targetRole, msg)
+
+	recipientCount := 0
+	for conn, info := range s.connections {
+		if info.role == targetRole {
+			recipientCount++
+			if err := conn.WriteJSON(msg); err != nil {
+				log.Printf("Error broadcasting to %s: %v", targetRole, err)
+			} else {
+				log.Printf("Successfully sent message to a %s", targetRole)
+			}
+		}
 	}
-	if err := conn.WriteJSON(response); err != nil {
-		log.Printf("Error sending response: %v", err)
-	}
+
+	log.Printf("Found %d recipients for role %s", recipientCount, targetRole)
 }
 
-func (s *WebSocketServer) sendErrorResponse(conn *websocket.Conn, message string) {
-	s.sendResponse(conn, "ERROR", map[string]string{"message": message})
+func handlePatientMessage(s *WebSocketServer, msg *pb.Message) {
+	// Forward patient's question to all doctors
+	s.broadcastToRole("doctor", &pb.WebSocketMessage{
+		Type: pb.MessageType_PATIENT_MESSAGE,
+		Payload: &pb.WebSocketMessage_Message{
+			Message: msg,
+		},
+	})
+
+	// Generate AI draft and send to doctors
+	draftMsg := &pb.WebSocketMessage{
+		Type: pb.MessageType_AI_DRAFT_READY,
+		Payload: &pb.WebSocketMessage_AiDraft{
+			AiDraft: &pb.AIDraftReady{
+				MessageId:       "msg_" + time.Now().String(), // TODO: Generate proper ID
+				OriginalMessage: msg.Content,
+				Draft:           "This is a hardcoded AI draft answer for: " + msg.Content,
+				Timestamp:       timestamppb.Now(),
+			},
+		},
+	}
+	s.broadcastToRole("doctor", draftMsg)
 }
 
-func marshal(v interface{}) json.RawMessage {
-	data, err := json.Marshal(v)
-	if err != nil {
-		log.Printf("Error marshaling response: %v", err)
-		return []byte("{}")
+func handleDoctorMessage(s *WebSocketServer, msg *pb.Message) {
+	// Forward doctor's message to all patients
+	s.broadcastToRole("patient", &pb.WebSocketMessage{
+		Type: pb.MessageType_DOCTOR_MESSAGE,
+		Payload: &pb.WebSocketMessage_Message{
+			Message: msg,
+		},
+	})
+}
+
+func handleDraftReview(s *WebSocketServer, review *pb.DraftReview) {
+	switch review.Action {
+	case pb.ReviewAction_ACCEPT, pb.ReviewAction_MODIFY:
+		// Send accepted or modified draft as a doctor message to patients
+		s.broadcastToRole("patient", &pb.WebSocketMessage{
+			Type: pb.MessageType_DOCTOR_MESSAGE,
+			Payload: &pb.WebSocketMessage_Message{
+				Message: &pb.Message{
+					Content:   review.Content,
+					Timestamp: timestamppb.Now(),
+				},
+			},
+		})
+	case pb.ReviewAction_REJECT:
+		// For rejected drafts, doctor should send a separate message
+		// No automatic message is sent here
 	}
-	return data
+
+	// TODO: Save review action and content to database
+	// This could include:
+	// - Original question
+	// - AI draft
+	// - Review action
+	// - Final content
+	// - Timestamps
 }
