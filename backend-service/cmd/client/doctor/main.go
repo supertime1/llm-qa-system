@@ -70,7 +70,7 @@ func main() {
 				}
 			case int32(pb.MessageType_AI_DRAFT_READY):
 				if draft, ok := msg["ai_draft"].(map[string]interface{}); ok {
-					fmt.Printf("\nAI Draft for question '%s':\n%s\n",
+					fmt.Printf("\nAI Draft ready for question '%s':\n%s\n",
 						draft["original_message"], draft["draft"])
 					fmt.Println("Use 'review <accept|modify|reject> [content]' to review")
 					fmt.Print("> ")
@@ -106,12 +106,22 @@ func main() {
 				continue
 			}
 
+			action := parts[1]
+			content := ""
+			if action != "reject" && len(parts) < 3 {
+				fmt.Println("Content required for accept/modify")
+				continue
+			}
+			if len(parts) > 2 {
+				content = strings.Join(parts[2:], " ")
+			}
+
 			msg := map[string]interface{}{
 				"type": pb.MessageType_DRAFT_REVIEW.Number(),
 				"review": map[string]interface{}{
-					"action":    parts[1],
-					"content":   strings.Join(parts[2:], " "),
-					"timestamp": timestamppb.Now(),
+					"action":    action,
+					"content":   content,
+					"timestamp": time.Now(),
 				},
 			}
 

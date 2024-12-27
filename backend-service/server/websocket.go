@@ -1,12 +1,12 @@
 package server
 
 import (
+	"fmt"
+	pb "llm-qa-system/backend-service/src/proto"
 	"log"
 	"net/http"
 	"sync"
 	"time"
-
-	pb "llm-qa-system/backend-service/src/proto"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -81,12 +81,58 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 		switch int32(msgType) {
 		case int32(pb.MessageType_PATIENT_MESSAGE):
 			log.Printf("Broadcasting patient message to doctors")
+			// 1. Forward to doctors
 			s.broadcastToRole("doctor", msg)
+
+			// 2. Generate AI draft (hardcoded for now)
+			if message, ok := msg["message"].(map[string]interface{}); ok {
+				if content, ok := message["content"].(string); ok {
+					draftMsg := map[string]interface{}{
+						"type": pb.MessageType_AI_DRAFT_READY.Number(),
+						"ai_draft": map[string]interface{}{
+							"message_id":       fmt.Sprintf("msg_%d", time.Now().Unix()),
+							"original_message": content,
+							"draft":            "This is a hardcoded AI draft answer for: " + content,
+							"timestamp":        time.Now(),
+						},
+					}
+					log.Printf("Sending AI draft to doctors")
+					s.broadcastToRole("doctor", draftMsg)
+				}
+			}
 
 		case int32(pb.MessageType_DOCTOR_MESSAGE):
 			log.Printf("Broadcasting doctor message to patients")
 			s.broadcastToRole("patient", msg)
+
+		case int32(pb.MessageType_DRAFT_REVIEW):
+			log.Printf("Processing draft review")
+			if review, ok := msg["review"].(map[string]interface{}); ok {
+				action, _ := review["action"].(string)
+				content, _ := review["content"].(string)
+
+				switch action {
+				case "accept", "modify":
+					// Send the accepted/modified content to patient
+					responseMsg := map[string]interface{}{
+						"type": pb.MessageType_DOCTOR_MESSAGE.Number(),
+						"message": map[string]interface{}{
+							"content":   content,
+							"timestamp": time.Now(),
+						},
+					}
+					s.broadcastToRole("patient", responseMsg)
+				case "reject":
+					// Do nothing - doctor should send a separate message
+					log.Printf("Draft rejected, waiting for doctor's message")
+				}
+
+				// TODO: Save review to database
+				log.Printf("Draft review saved: action=%s, content=%s", action, content)
+			}
+
 		}
+
 	}
 }
 
