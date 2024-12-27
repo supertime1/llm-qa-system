@@ -16,12 +16,23 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type DoctorClient struct {
+	conn        *websocket.Conn
+	latestDraft struct {
+		originalMessage string
+		draft           string
+	}
+}
+
 func main() {
 	u := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/ws", RawQuery: "role=doctor"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
+
+	client := &DoctorClient{conn: c}
+
 	defer c.Close()
 
 	interrupt := make(chan os.Signal, 1)
@@ -50,6 +61,7 @@ func main() {
 	})
 
 	// Handle incoming messages
+	// Update message handling section:
 	go func() {
 		for {
 			var msg map[string]interface{}
@@ -70,8 +82,10 @@ func main() {
 				}
 			case int32(pb.MessageType_AI_DRAFT_READY):
 				if draft, ok := msg["ai_draft"].(map[string]interface{}); ok {
+					client.latestDraft.originalMessage = draft["original_message"].(string)
+					client.latestDraft.draft = draft["draft"].(string)
 					fmt.Printf("\nAI Draft ready for question '%s':\n%s\n",
-						draft["original_message"], draft["draft"])
+						client.latestDraft.originalMessage, client.latestDraft.draft)
 					fmt.Println("Use 'review <accept|modify|reject> [content]' to review")
 					fmt.Print("> ")
 				}
@@ -107,13 +121,22 @@ func main() {
 			}
 
 			action := parts[1]
-			content := ""
-			if action != "reject" && len(parts) < 3 {
-				fmt.Println("Content required for accept/modify")
-				continue
-			}
-			if len(parts) > 2 {
+			var content string
+
+			switch action {
+			case "accept":
+				content = client.latestDraft.draft // Use the stored draft directly
+			case "modify":
+				if len(parts) < 3 {
+					fmt.Println("Content required for modify")
+					continue
+				}
 				content = strings.Join(parts[2:], " ")
+			case "reject":
+				// No content needed
+			default:
+				fmt.Println("Invalid action. Use accept, modify, or reject")
+				continue
 			}
 
 			msg := map[string]interface{}{

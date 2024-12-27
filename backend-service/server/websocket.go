@@ -92,7 +92,7 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 						"ai_draft": map[string]interface{}{
 							"message_id":       fmt.Sprintf("msg_%d", time.Now().Unix()),
 							"original_message": content,
-							"draft":            "This is a hardcoded AI draft answer for: " + content,
+							"draft":            "This is a hardcoded AI draft answer",
 							"timestamp":        time.Now(),
 						},
 					}
