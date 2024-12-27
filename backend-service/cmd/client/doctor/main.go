@@ -13,6 +13,7 @@ import (
 	pb "llm-qa-system/backend-service/src/proto"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -60,32 +61,35 @@ func main() {
 		return nil
 	})
 
+	marshaler := protojson.MarshalOptions{UseProtoNames: true}
+	unmarshaler := protojson.UnmarshalOptions{DiscardUnknown: true}
+
 	// Handle incoming messages
-	// Update message handling section:
 	go func() {
 		for {
-			var msg map[string]interface{}
-			if err := c.ReadJSON(&msg); err != nil {
+			_, rawMsg, err := c.ReadMessage()
+			if err != nil {
 				log.Printf("read error: %v", err)
 				return
 			}
 
-			msgType, _ := msg["type"].(float64)
+			var wsMsg pb.WebSocketMessage
+			if err := unmarshaler.Unmarshal(rawMsg, &wsMsg); err != nil {
+				log.Printf("unmarshal error: %v", err)
+				continue
+			}
 
-			switch int32(msgType) {
-			case int32(pb.MessageType_PATIENT_MESSAGE):
-				if message, ok := msg["message"].(map[string]interface{}); ok {
-					if content, ok := message["content"].(string); ok {
-						fmt.Printf("\nPatient: %s\n", content)
-						fmt.Print("> ")
-					}
+			switch wsMsg.Type {
+			case pb.MessageType_PATIENT_MESSAGE:
+				if msg := wsMsg.GetMessage(); msg != nil {
+					fmt.Printf("\nPatient: %s\n", msg.Content)
+					fmt.Print("> ")
 				}
-			case int32(pb.MessageType_AI_DRAFT_READY):
-				if draft, ok := msg["ai_draft"].(map[string]interface{}); ok {
-					client.latestDraft.originalMessage = draft["original_message"].(string)
-					client.latestDraft.draft = draft["draft"].(string)
-					fmt.Printf("\nAI Draft ready for question '%s':\n%s\n",
-						client.latestDraft.originalMessage, client.latestDraft.draft)
+			case pb.MessageType_AI_DRAFT_READY:
+				if draft := wsMsg.GetAiDraft(); draft != nil {
+					client.latestDraft.originalMessage = draft.MessageId
+					client.latestDraft.draft = draft.Draft
+					fmt.Printf("\nAI Draft ready:\n%s\n", draft.Draft)
 					fmt.Println("Use 'review <accept|modify|reject> [content]' to review")
 					fmt.Print("> ")
 				}
@@ -101,18 +105,14 @@ func main() {
 
 	for {
 		fmt.Print("> ")
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			log.Printf("Error reading input: %v", err)
-			continue
-		}
-
+		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
-		if input == "" {
+
+		parts := strings.Fields(input)
+		if len(parts) == 0 {
 			continue
 		}
 
-		parts := strings.SplitN(input, " ", 3)
 		switch parts[0] {
 		case "review":
 			if len(parts) < 2 {
@@ -120,56 +120,33 @@ func main() {
 				continue
 			}
 
-			action := parts[1]
-			var content string
+			var wsMsg pb.WebSocketMessage
+			wsMsg.Type = pb.MessageType_DRAFT_REVIEW
 
-			switch action {
+			review := &pb.DraftReview{
+				MessageId: client.latestDraft.originalMessage,
+				Timestamp: timestamppb.Now(),
+			}
+
+			switch parts[1] {
 			case "accept":
-				content = client.latestDraft.draft // Use the stored draft directly
+				review.Action = pb.ReviewAction_ACCEPT
+				review.Content = client.latestDraft.draft
 			case "modify":
-				if len(parts) < 3 {
-					fmt.Println("Content required for modify")
-					continue
-				}
-				content = strings.Join(parts[2:], " ")
+				review.Action = pb.ReviewAction_MODIFY
+				review.Content = strings.Join(parts[2:], " ")
 			case "reject":
-				// No content needed
+				review.Action = pb.ReviewAction_REJECT
 			default:
 				fmt.Println("Invalid action. Use accept, modify, or reject")
 				continue
 			}
 
-			msg := map[string]interface{}{
-				"type": pb.MessageType_DRAFT_REVIEW.Number(),
-				"review": map[string]interface{}{
-					"action":    action,
-					"content":   content,
-					"timestamp": time.Now(),
-				},
-			}
+			wsMsg.Payload = &pb.WebSocketMessage_Review{Review: review}
 
-			if err := c.WriteJSON(msg); err != nil {
-				log.Printf("Error sending review: %v", err)
-				continue
-			}
-
-		case "send":
-			if len(parts) < 2 {
-				fmt.Println("Usage: send <message>")
-				continue
-			}
-
-			msg := map[string]interface{}{
-				"type": pb.MessageType_DOCTOR_MESSAGE.Number(),
-				"message": map[string]interface{}{
-					"content":   strings.Join(parts[1:], " "),
-					"timestamp": timestamppb.Now(),
-				},
-			}
-
-			if err := c.WriteJSON(msg); err != nil {
-				log.Printf("Error sending message: %v", err)
-				continue
+			jsonBytes, _ := marshaler.Marshal(&wsMsg)
+			if err := c.WriteMessage(websocket.TextMessage, jsonBytes); err != nil {
+				log.Printf("write error: %v", err)
 			}
 		}
 	}

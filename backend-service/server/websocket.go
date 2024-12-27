@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -42,6 +43,12 @@ var upgrader = websocket.Upgrader{
 }
 
 func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Configure protojson
+
+	unmarshaler := protojson.UnmarshalOptions{
+		DiscardUnknown: true,
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Failed to upgrade connection: %v", err)
@@ -64,89 +71,79 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	}()
 
 	for {
-		var msg map[string]interface{}
-		if err := conn.ReadJSON(&msg); err != nil {
-			log.Printf("ReadJSON error from %s: %v", role, err)
+		_, rawMsg, err := conn.ReadMessage()
+		if err != nil {
+			log.Printf("ReadMessage error from %s: %v", role, err)
 			break
 		}
 
-		log.Printf("Received raw message from %s: %+v", role, msg)
-
-		msgType, ok := msg["type"].(float64)
-		if !ok {
-			log.Printf("Invalid message type from %s: %+v", role, msg["type"])
-			continue
+		var wsMsg pb.WebSocketMessage
+		if err := unmarshaler.Unmarshal(rawMsg, &wsMsg); err != nil {
+			log.Printf("Unmarshal error from %s: %v", role, err)
+			break
 		}
 
-		switch int32(msgType) {
-		case int32(pb.MessageType_PATIENT_MESSAGE):
-			log.Printf("Broadcasting patient message to doctors")
-			// 1. Forward to doctors
-			s.broadcastToRole("doctor", msg)
+		switch wsMsg.Type {
+		case pb.MessageType_PATIENT_MESSAGE:
+			if msg := wsMsg.GetMessage(); msg != nil {
+				// Forward to doctors
+				s.broadcastToRole("doctor", &wsMsg)
 
-			// 2. Generate AI draft (hardcoded for now)
-			if message, ok := msg["message"].(map[string]interface{}); ok {
-				if content, ok := message["content"].(string); ok {
-					draftMsg := map[string]interface{}{
-						"type": pb.MessageType_AI_DRAFT_READY.Number(),
-						"ai_draft": map[string]interface{}{
-							"message_id":       fmt.Sprintf("msg_%d", time.Now().Unix()),
-							"original_message": content,
-							"draft":            "This is a hardcoded AI draft answer",
-							"timestamp":        time.Now(),
+				// Generate AI draft
+				draftMsg := &pb.WebSocketMessage{
+					Type: pb.MessageType_AI_DRAFT_READY,
+					Payload: &pb.WebSocketMessage_AiDraft{
+						AiDraft: &pb.AIDraftReady{
+							MessageId:       fmt.Sprintf("msg_%d", time.Now().Unix()),
+							OriginalMessage: msg.Content,
+							Draft:           "This is a hardcoded AI draft answer",
+							Timestamp:       timestamppb.Now(),
 						},
-					}
-					log.Printf("Sending AI draft to doctors")
-					s.broadcastToRole("doctor", draftMsg)
+					},
 				}
+				s.broadcastToRole("doctor", draftMsg)
 			}
 
-		case int32(pb.MessageType_DOCTOR_MESSAGE):
-			log.Printf("Broadcasting doctor message to patients")
-			s.broadcastToRole("patient", msg)
+		case pb.MessageType_DOCTOR_MESSAGE:
+			s.broadcastToRole("patient", &wsMsg)
 
-		case int32(pb.MessageType_DRAFT_REVIEW):
-			log.Printf("Processing draft review")
-			if review, ok := msg["review"].(map[string]interface{}); ok {
-				action, _ := review["action"].(string)
-				content, _ := review["content"].(string)
-
-				switch action {
-				case "accept", "modify":
-					// Send the accepted/modified content to patient
-					responseMsg := map[string]interface{}{
-						"type": pb.MessageType_DOCTOR_MESSAGE.Number(),
-						"message": map[string]interface{}{
-							"content":   content,
-							"timestamp": time.Now(),
+		case pb.MessageType_DRAFT_REVIEW:
+			if review := wsMsg.GetReview(); review != nil {
+				switch review.Action {
+				case pb.ReviewAction_ACCEPT, pb.ReviewAction_MODIFY:
+					responseMsg := &pb.WebSocketMessage{
+						Type: pb.MessageType_DOCTOR_MESSAGE,
+						Payload: &pb.WebSocketMessage_Message{
+							Message: &pb.Message{
+								Content:   review.Content,
+								Timestamp: timestamppb.Now(),
+							},
 						},
 					}
 					s.broadcastToRole("patient", responseMsg)
-				case "reject":
-					// Do nothing - doctor should send a separate message
-					log.Printf("Draft rejected, waiting for doctor's message")
 				}
-
-				// TODO: Save review to database
-				log.Printf("Draft review saved: action=%s, content=%s", action, content)
 			}
-
 		}
-
 	}
 }
 
-func (s *WebSocketServer) broadcastToRole(targetRole string, msg interface{}) {
+func (s *WebSocketServer) broadcastToRole(targetRole string, msg *pb.WebSocketMessage) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	log.Printf("Broadcasting message to role %s: %+v", targetRole, msg)
+	// Marshal message once
+	marshaler := protojson.MarshalOptions{UseProtoNames: true}
+	jsonBytes, err := marshaler.Marshal(msg)
+	if err != nil {
+		log.Printf("Marshal error: %v", err)
+		return
+	}
 
 	recipientCount := 0
 	for conn, info := range s.connections {
 		if info.role == targetRole {
 			recipientCount++
-			if err := conn.WriteJSON(msg); err != nil {
+			if err := conn.WriteMessage(websocket.TextMessage, jsonBytes); err != nil {
 				log.Printf("Error broadcasting to %s: %v", targetRole, err)
 			} else {
 				log.Printf("Successfully sent message to a %s", targetRole)

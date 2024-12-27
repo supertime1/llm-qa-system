@@ -13,6 +13,7 @@ import (
 	pb "llm-qa-system/backend-service/src/proto"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -52,24 +53,30 @@ func main() {
 		return nil
 	})
 
+	// Configure protojson
+	marshaler := protojson.MarshalOptions{UseProtoNames: true}
+	unmarshaler := protojson.UnmarshalOptions{DiscardUnknown: true}
+
 	// Handle incoming messages
 	go func() {
 		for {
-			var msg map[string]interface{}
-			if err := c.ReadJSON(&msg); err != nil {
+			_, rawMsg, err := c.ReadMessage()
+			if err != nil {
 				log.Printf("read error: %v", err)
 				return
 			}
 
-			msgType, _ := msg["type"].(float64)
+			var wsMsg pb.WebSocketMessage
+			if err := unmarshaler.Unmarshal(rawMsg, &wsMsg); err != nil {
+				log.Printf("unmarshal error: %v", err)
+				continue
+			}
 
-			switch int32(msgType) {
-			case int32(pb.MessageType_DOCTOR_MESSAGE):
-				if message, ok := msg["message"].(map[string]interface{}); ok {
-					if content, ok := message["content"].(string); ok {
-						fmt.Printf("\nDoctor: %s\n", content)
-						fmt.Print("> ")
-					}
+			switch wsMsg.Type {
+			case pb.MessageType_DOCTOR_MESSAGE:
+				if msg := wsMsg.GetMessage(); msg != nil {
+					fmt.Printf("\nDoctor: %s\n", msg.Content)
+					fmt.Print("> ")
 				}
 			}
 		}
@@ -81,29 +88,30 @@ func main() {
 
 	for {
 		fmt.Print("> ")
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			log.Printf("Error reading input: %v", err)
-			continue
-		}
-
+		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 		if input == "" {
 			continue
 		}
 
-		msg := map[string]interface{}{
-			"type": pb.MessageType_PATIENT_MESSAGE.Number(),
-			"message": map[string]interface{}{
-				"content":   input,
-				"timestamp": timestamppb.Now(),
+		wsMsg := &pb.WebSocketMessage{
+			Type: pb.MessageType_PATIENT_MESSAGE,
+			Payload: &pb.WebSocketMessage_Message{
+				Message: &pb.Message{
+					Content:   input,
+					Timestamp: timestamppb.Now(),
+				},
 			},
 		}
 
-		log.Printf("Sending message structure: %+v", msg)
+		jsonBytes, err := marshaler.Marshal(wsMsg)
+		if err != nil {
+			log.Printf("marshal error: %v", err)
+			continue
+		}
 
-		if err := c.WriteJSON(msg); err != nil {
-			log.Printf("Error sending message: %v", err)
+		if err := c.WriteMessage(websocket.TextMessage, jsonBytes); err != nil {
+			log.Printf("write error: %v", err)
 			continue
 		}
 	}
