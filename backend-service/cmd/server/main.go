@@ -24,7 +24,17 @@ func main() {
 	// Get configuration from environment variables
 	dbURL := getEnvOrDefault("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/medical_chat")
 	llmServiceAddr := getEnvOrDefault("LLM_SERVICE_ADDR", "localhost:50051")
-	redisAddr := getEnvOrDefault("REDIS_ADDR", "localhost:6379")
+	kafkaBrokers := []string{getEnvOrDefault("KAFKA_BROKERS", "localhost:9092")}
+
+	// Initialize Kafka first with all topics
+	kafkaConfig := server.KafkaConfig{
+		Brokers: kafkaBrokers,
+		Topics:  server.GetDefaultTopics(),
+	}
+
+	if err := server.InitializeKafka(kafkaConfig); err != nil {
+		log.Fatalf("Failed to initialize Kafka: %v", err)
+	}
 
 	// Connect to database using pgx
 	dbpool, err := pgxpool.New(ctx, dbURL)
@@ -34,7 +44,7 @@ func main() {
 	defer dbpool.Close()
 
 	// Create server group
-	serverGroup, err := server.NewServerGroup(dbpool, llmServiceAddr, redisAddr)
+	serverGroup, err := server.NewServerGroup(dbpool, llmServiceAddr, kafkaBrokers)
 	if err != nil {
 		log.Fatalf("Failed to create server group: %v", err)
 	}

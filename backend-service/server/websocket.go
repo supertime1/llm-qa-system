@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	pb "llm-qa-system/backend-service/src/proto"
 	"log"
@@ -9,7 +10,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -28,18 +31,33 @@ type ChatSession struct {
 
 type WebSocketServer struct {
 	*BaseServer
-	llmClient *LLMClient
-	sessions  map[string]*ChatSession
-	mu        sync.RWMutex
+	llmClient  *LLMClient
+	sessions   map[string]*ChatSession
+	mu         sync.RWMutex
+	reader     *kafka.Reader
+	cancelFunc context.CancelFunc
 }
 
-func NewWebSocketServer(base *BaseServer, llmClient *LLMClient) *WebSocketServer {
-	return &WebSocketServer{
+func NewWebSocketServer(base *BaseServer, llmClient *LLMClient, kafkaBrokers []string) *WebSocketServer {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	ws := &WebSocketServer{
 		BaseServer: base,
 		llmClient:  llmClient,
 		sessions:   make(map[string]*ChatSession),
 		mu:         sync.RWMutex{},
+		reader: kafka.NewReader(kafka.ReaderConfig{
+			Brokers: kafkaBrokers,
+			Topic:   TopicLLMResponses,
+			GroupID: "websocket-server",
+		}),
+		cancelFunc: cancel,
 	}
+
+	// Start Kafka consumer
+	go ws.consumeKafkaMessages(ctx)
+
+	return ws
 }
 
 var upgrader = websocket.Upgrader{
@@ -78,8 +96,6 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	}
 
 	defer s.handleDisconnect(connection)
-	// Store the session ID from handleSession
-	sessionID = connection.sessionID // Important: use the assigned session ID
 
 	log.Printf("New %s connected to session %s", role, sessionID)
 
@@ -100,22 +116,23 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 		switch wsMsg.Type {
 		case pb.MessageType_PATIENT_MESSAGE:
 			if msg := wsMsg.GetMessage(); msg != nil {
-				// Forward to doctor in the same session
+				// 1. Forward original message to doctor
 				s.broadcastToRole(sessionID, "doctor", &wsMsg)
 
-				// Generate AI draft
-				draftMsg := &pb.WebSocketMessage{
-					Type: pb.MessageType_AI_DRAFT_READY,
-					Payload: &pb.WebSocketMessage_AiDraft{
-						AiDraft: &pb.AIDraftReady{
-							MessageId:       fmt.Sprintf("msg_%d", time.Now().Unix()),
-							OriginalMessage: msg.Content,
-							Draft:           "This is a hardcoded AI draft answer",
-							Timestamp:       timestamppb.Now(),
+				// 2. Request draft from LLM service
+				// The draft will be sent to doctor via Kafka consumer when ready
+				if err := s.llmClient.RequestDraft(sessionID, msg.Content); err != nil {
+					log.Printf("Error requesting draft: %v", err)
+					errorMsg := &pb.WebSocketMessage{
+						Type: pb.MessageType_ERROR,
+						Payload: &pb.WebSocketMessage_Error{
+							Error: &pb.Error{
+								Message: "Failed to generate AI draft",
+							},
 						},
-					},
+					}
+					s.broadcastToRole(sessionID, "doctor", errorMsg)
 				}
-				s.broadcastToRole(sessionID, "doctor", draftMsg)
 			}
 
 		case pb.MessageType_DOCTOR_MESSAGE:
@@ -209,7 +226,6 @@ func (s *WebSocketServer) broadcastToRole(sessionID, targetRole string, msg *pb.
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	log.Printf("Looking for session: %s", sessionID)
 	session, exists := s.sessions[sessionID]
 	if !exists {
 		log.Printf("Session %s not found", sessionID)
@@ -251,4 +267,50 @@ func generateSessionID() string {
 func isValidDoctorToken(token string) bool {
 	// TODO: Implement proper token validation
 	return token != ""
+}
+
+// This consumer handles the LLM draft from Kafka and broadcasts to doctor
+func (s *WebSocketServer) consumeKafkaMessages(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			msg, err := s.reader.ReadMessage(ctx)
+			if err != nil {
+				log.Printf("Error reading kafka message: %v", err)
+				continue
+			}
+
+			// Unmarshal the message
+			var draftReady pb.AIDraftReady
+			if err := proto.Unmarshal(msg.Value, &draftReady); err != nil {
+				log.Printf("Error unmarshaling draft: %v", err)
+				continue
+			}
+
+			// Create WebSocket message with the draft
+			wsMsg := &pb.WebSocketMessage{
+				Type: pb.MessageType_AI_DRAFT_READY,
+				Payload: &pb.WebSocketMessage_AiDraft{
+					AiDraft: &draftReady,
+				},
+			}
+
+			// Get session ID from Kafka message key and broadcast to doctor
+			sessionID := string(msg.Key)
+			s.broadcastToRole(sessionID, "doctor", wsMsg)
+		}
+	}
+}
+
+func (s *WebSocketServer) Close() error {
+	// Cancel the context to stop the Kafka consumer
+	s.cancelFunc()
+
+	// Close the Kafka reader
+	if err := s.reader.Close(); err != nil {
+		return fmt.Errorf("failed to close kafka reader: %v", err)
+	}
+	return nil
 }

@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x15medical_service.proto\x12\x07\x62\x61\x63kend\x1a\x1fgoogle/protobuf/timestamp.proto\"\x15\n\x04UUID\x12\r\n\x05value\x18\x01 \x01(\x0c\"x\n\x0fQuestionRequest\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12*\n\x0cuser_context\x18\x03 \x01(\x0b\x32\x14.backend.UserContext\"\x8f\x01\n\x0bUserContext\x12$\n\tuser_info\x18\x01 \x01(\x0b\x32\x11.backend.UserInfo\x12.\n\x0e\x62iometric_data\x18\x02 \x03(\x0b\x32\x16.backend.BiometricData\x12*\n\x0c\x63hat_history\x18\x03 \x03(\x0b\x32\x14.backend.ChatMessage\"Q\n\x08UserInfo\x12\x0b\n\x03\x61ge\x18\x01 \x01(\t\x12\x1f\n\x06gender\x18\x02 \x01(\x0e\x32\x0f.backend.Gender\x12\x17\n\x0fmedical_history\x18\x03 \x03(\t\"s\n\rBiometricData\x12$\n\x04type\x18\x01 \x01(\x0e\x32\x16.backend.BiometricType\x12\r\n\x05value\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"j\n\x0b\x43hatMessage\x12\x1b\n\x04role\x18\x01 \x01(\x0e\x32\r.backend.Role\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"z\n\x10QuestionResponse\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x12\n\nreferences\x18\x03 \x03(\t\x12\x18\n\x10\x63onfidence_score\x18\x04 \x01(\x02\"\xb9\x01\n\x10WebSocketMessage\x12\"\n\x04type\x18\x01 \x01(\x0e\x32\x14.backend.MessageType\x12#\n\x07message\x18\x02 \x01(\x0b\x32\x10.backend.MessageH\x00\x12)\n\x08\x61i_draft\x18\x03 \x01(\x0b\x32\x15.backend.AIDraftReadyH\x00\x12&\n\x06review\x18\x04 \x01(\x0b\x32\x14.backend.DraftReviewH\x00\x42\t\n\x07payload\"I\n\x07Message\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"z\n\x0c\x41IDraftReady\x12\x12\n\nmessage_id\x18\x01 \x01(\t\x12\x18\n\x10original_message\x18\x02 \x01(\t\x12\r\n\x05\x64raft\x18\x03 \x01(\t\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x88\x01\n\x0b\x44raftReview\x12\x12\n\nmessage_id\x18\x01 \x01(\t\x12%\n\x06\x61\x63tion\x18\x02 \x01(\x0e\x32\x15.backend.ReviewAction\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp*L\n\x04Role\x12\x10\n\x0cROLE_UNKNOWN\x10\x00\x12\x10\n\x0cROLE_PATIENT\x10\x01\x12\x0f\n\x0bROLE_DOCTOR\x10\x02\x12\x0f\n\x0bROLE_SYSTEM\x10\x03*@\n\x06Gender\x12\x12\n\x0eGENDER_UNKNOWN\x10\x00\x12\x0f\n\x0bGENDER_MALE\x10\x01\x12\x11\n\rGENDER_FEMALE\x10\x02*z\n\rBiometricType\x12\x15\n\x11\x42IOMETRIC_UNKNOWN\x10\x00\x12\x18\n\x14\x42IOMETRIC_HEART_RATE\x10\x01\x12\x1a\n\x16\x42IOMETRIC_BLOOD_OXYGEN\x10\x02\x12\x1c\n\x18\x42IOMETRIC_BLOOD_PRESSURE\x10\x03*z\n\x0bMessageType\x12\x1c\n\x18MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\x13\n\x0fPATIENT_MESSAGE\x10\x01\x12\x12\n\x0e\x44OCTOR_MESSAGE\x10\x02\x12\x12\n\x0e\x41I_DRAFT_READY\x10\x03\x12\x10\n\x0c\x44RAFT_REVIEW\x10\x04*Q\n\x0cReviewAction\x12\x1d\n\x19REVIEW_ACTION_UNSPECIFIED\x10\x00\x12\n\n\x06\x41\x43\x43\x45PT\x10\x01\x12\n\n\x06MODIFY\x10\x02\x12\n\n\x06REJECT\x10\x03\x32`\n\x10MedicalQAService\x12L\n\x13GenerateDraftAnswer\x12\x18.backend.QuestionRequest\x1a\x19.backend.QuestionResponse\"\x00\x42?Z=github.com/supertime1/llm-qa-system/backend-service/src/protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x15medical_service.proto\x12\x07\x62\x61\x63kend\x1a\x1fgoogle/protobuf/timestamp.proto\"\x15\n\x04UUID\x12\r\n\x05value\x18\x01 \x01(\x0c\"x\n\x0fQuestionRequest\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x15\n\rquestion_text\x18\x02 \x01(\t\x12*\n\x0cuser_context\x18\x03 \x01(\x0b\x32\x14.backend.UserContext\"\x8f\x01\n\x0bUserContext\x12$\n\tuser_info\x18\x01 \x01(\x0b\x32\x11.backend.UserInfo\x12.\n\x0e\x62iometric_data\x18\x02 \x03(\x0b\x32\x16.backend.BiometricData\x12*\n\x0c\x63hat_history\x18\x03 \x03(\x0b\x32\x14.backend.ChatMessage\"Q\n\x08UserInfo\x12\x0b\n\x03\x61ge\x18\x01 \x01(\t\x12\x1f\n\x06gender\x18\x02 \x01(\x0e\x32\x0f.backend.Gender\x12\x17\n\x0fmedical_history\x18\x03 \x03(\t\"s\n\rBiometricData\x12$\n\x04type\x18\x01 \x01(\x0e\x32\x16.backend.BiometricType\x12\r\n\x05value\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"j\n\x0b\x43hatMessage\x12\x1b\n\x04role\x18\x01 \x01(\x0e\x32\r.backend.Role\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"z\n\x10QuestionResponse\x12\"\n\x0bquestion_id\x18\x01 \x01(\x0b\x32\r.backend.UUID\x12\x14\n\x0c\x64raft_answer\x18\x02 \x01(\t\x12\x12\n\nreferences\x18\x03 \x03(\t\x12\x18\n\x10\x63onfidence_score\x18\x04 \x01(\x02\"\xda\x01\n\x10WebSocketMessage\x12\"\n\x04type\x18\x01 \x01(\x0e\x32\x14.backend.MessageType\x12#\n\x07message\x18\x02 \x01(\x0b\x32\x10.backend.MessageH\x00\x12)\n\x08\x61i_draft\x18\x03 \x01(\x0b\x32\x15.backend.AIDraftReadyH\x00\x12&\n\x06review\x18\x04 \x01(\x0b\x32\x14.backend.DraftReviewH\x00\x12\x1f\n\x05\x65rror\x18\x05 \x01(\x0b\x32\x0e.backend.ErrorH\x00\x42\t\n\x07payload\"I\n\x07Message\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"z\n\x0c\x41IDraftReady\x12\x12\n\nmessage_id\x18\x01 \x01(\t\x12\x18\n\x10original_message\x18\x02 \x01(\t\x12\r\n\x05\x64raft\x18\x03 \x01(\t\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x88\x01\n\x0b\x44raftReview\x12\x12\n\nmessage_id\x18\x01 \x01(\t\x12%\n\x06\x61\x63tion\x18\x02 \x01(\x0e\x32\x15.backend.ReviewAction\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x18\n\x05\x45rror\x12\x0f\n\x07message\x18\x01 \x01(\t*L\n\x04Role\x12\x10\n\x0cROLE_UNKNOWN\x10\x00\x12\x10\n\x0cROLE_PATIENT\x10\x01\x12\x0f\n\x0bROLE_DOCTOR\x10\x02\x12\x0f\n\x0bROLE_SYSTEM\x10\x03*@\n\x06Gender\x12\x12\n\x0eGENDER_UNKNOWN\x10\x00\x12\x0f\n\x0bGENDER_MALE\x10\x01\x12\x11\n\rGENDER_FEMALE\x10\x02*z\n\rBiometricType\x12\x15\n\x11\x42IOMETRIC_UNKNOWN\x10\x00\x12\x18\n\x14\x42IOMETRIC_HEART_RATE\x10\x01\x12\x1a\n\x16\x42IOMETRIC_BLOOD_OXYGEN\x10\x02\x12\x1c\n\x18\x42IOMETRIC_BLOOD_PRESSURE\x10\x03*\x85\x01\n\x0bMessageType\x12\x1c\n\x18MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\x13\n\x0fPATIENT_MESSAGE\x10\x01\x12\x12\n\x0e\x44OCTOR_MESSAGE\x10\x02\x12\x12\n\x0e\x41I_DRAFT_READY\x10\x03\x12\x10\n\x0c\x44RAFT_REVIEW\x10\x04\x12\t\n\x05\x45RROR\x10\x05*Q\n\x0cReviewAction\x12\x1d\n\x19REVIEW_ACTION_UNSPECIFIED\x10\x00\x12\n\n\x06\x41\x43\x43\x45PT\x10\x01\x12\n\n\x06MODIFY\x10\x02\x12\n\n\x06REJECT\x10\x03\x32`\n\x10MedicalQAService\x12L\n\x13GenerateDraftAnswer\x12\x18.backend.QuestionRequest\x1a\x19.backend.QuestionResponse\"\x00\x42?Z=github.com/supertime1/llm-qa-system/backend-service/src/protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -22,16 +22,16 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'medical_service_pb2', _glob
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
   DESCRIPTOR._serialized_options = b'Z=github.com/supertime1/llm-qa-system/backend-service/src/proto'
-  _globals['_ROLE']._serialized_start=1316
-  _globals['_ROLE']._serialized_end=1392
-  _globals['_GENDER']._serialized_start=1394
-  _globals['_GENDER']._serialized_end=1458
-  _globals['_BIOMETRICTYPE']._serialized_start=1460
-  _globals['_BIOMETRICTYPE']._serialized_end=1582
-  _globals['_MESSAGETYPE']._serialized_start=1584
-  _globals['_MESSAGETYPE']._serialized_end=1706
-  _globals['_REVIEWACTION']._serialized_start=1708
-  _globals['_REVIEWACTION']._serialized_end=1789
+  _globals['_ROLE']._serialized_start=1375
+  _globals['_ROLE']._serialized_end=1451
+  _globals['_GENDER']._serialized_start=1453
+  _globals['_GENDER']._serialized_end=1517
+  _globals['_BIOMETRICTYPE']._serialized_start=1519
+  _globals['_BIOMETRICTYPE']._serialized_end=1641
+  _globals['_MESSAGETYPE']._serialized_start=1644
+  _globals['_MESSAGETYPE']._serialized_end=1777
+  _globals['_REVIEWACTION']._serialized_start=1779
+  _globals['_REVIEWACTION']._serialized_end=1860
   _globals['_UUID']._serialized_start=67
   _globals['_UUID']._serialized_end=88
   _globals['_QUESTIONREQUEST']._serialized_start=90
@@ -47,13 +47,15 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _globals['_QUESTIONRESPONSE']._serialized_start=666
   _globals['_QUESTIONRESPONSE']._serialized_end=788
   _globals['_WEBSOCKETMESSAGE']._serialized_start=791
-  _globals['_WEBSOCKETMESSAGE']._serialized_end=976
-  _globals['_MESSAGE']._serialized_start=978
-  _globals['_MESSAGE']._serialized_end=1051
-  _globals['_AIDRAFTREADY']._serialized_start=1053
-  _globals['_AIDRAFTREADY']._serialized_end=1175
-  _globals['_DRAFTREVIEW']._serialized_start=1178
-  _globals['_DRAFTREVIEW']._serialized_end=1314
-  _globals['_MEDICALQASERVICE']._serialized_start=1791
-  _globals['_MEDICALQASERVICE']._serialized_end=1887
+  _globals['_WEBSOCKETMESSAGE']._serialized_end=1009
+  _globals['_MESSAGE']._serialized_start=1011
+  _globals['_MESSAGE']._serialized_end=1084
+  _globals['_AIDRAFTREADY']._serialized_start=1086
+  _globals['_AIDRAFTREADY']._serialized_end=1208
+  _globals['_DRAFTREVIEW']._serialized_start=1211
+  _globals['_DRAFTREVIEW']._serialized_end=1347
+  _globals['_ERROR']._serialized_start=1349
+  _globals['_ERROR']._serialized_end=1373
+  _globals['_MEDICALQASERVICE']._serialized_start=1862
+  _globals['_MEDICALQASERVICE']._serialized_end=1958
 # @@protoc_insertion_point(module_scope)

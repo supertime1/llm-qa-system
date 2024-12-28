@@ -81,6 +81,7 @@ enum MessageType {
     DOCTOR_MESSAGE = 2;           // Questions and messages between patient and doctor
     AI_DRAFT_READY = 3;    // Server -> Doctor
     DRAFT_REVIEW = 4;      // Doctor -> Server
+    ERROR = 5;             // Error message
 }
 
 enum ReviewAction {
@@ -97,6 +98,7 @@ message WebSocketMessage {
         Message message = 2;         // For questions and messages
         AIDraftReady ai_draft = 3;   // For sending AI draft to doctor
         DraftReview review = 4;      // For doctor's review of AI draft
+        Error error = 5;            // For error messages
     }
 }
 
@@ -117,4 +119,8 @@ message DraftReview {
     ReviewAction action = 2;
     string content = 3;
     google.protobuf.Timestamp timestamp = 4;
+}
+
+message Error {
+    string message = 1;
 }

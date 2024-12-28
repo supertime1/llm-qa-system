@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -17,19 +18,21 @@ type ServerGroup struct {
 	healthServer *HealthServer
 	db           *pgxpool.Pool
 	httpServer   *http.Server
+	llmClient    *LLMClient // Add this field
+
 }
 
-func NewServerGroup(pool *pgxpool.Pool, llmServiceAddr string, redisAddr string) (*ServerGroup, error) {
+func NewServerGroup(pool *pgxpool.Pool, llmServiceAddr string, kafkaBrokers []string) (*ServerGroup, error) {
 	baseServer := NewBaseServer(pool)
 
 	// Create LLM client
-	llmClient, err := NewLLMClient(llmServiceAddr)
+	llmClient, err := NewLLMClient(llmServiceAddr, kafkaBrokers)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create WebSocket server
-	wsServer := NewWebSocketServer(baseServer, llmClient)
+	wsServer := NewWebSocketServer(baseServer, llmClient, kafkaBrokers)
 
 	// Create HTTP server
 	mux := http.NewServeMux()
@@ -43,6 +46,8 @@ func NewServerGroup(pool *pgxpool.Pool, llmServiceAddr string, redisAddr string)
 		wsServer:     wsServer,
 		healthServer: newHealthServer(pool),
 		httpServer:   httpServer,
+		llmClient:    llmClient, // Store the client
+
 	}
 
 	// Set up WebSocket route
@@ -70,14 +75,29 @@ func (s *ServerGroup) Start(ctx context.Context) error {
 	return s.httpServer.Shutdown(context.Background())
 }
 
-func (s *ServerGroup) Stop() {
-	// Shutdown HTTP server
-	if err := s.httpServer.Shutdown(context.Background()); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+func (sg *ServerGroup) Shutdown(ctx context.Context) error {
+	var errs []error
+
+	// Close WebSocket server first (this will close Kafka consumer)
+	if err := sg.wsServer.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("websocket server close error: %v", err))
 	}
 
-	// Cleanup database connection
-	if s.db != nil {
-		s.db.Close()
+	// Close LLM client (this will close Kafka producer)
+	if err := sg.llmClient.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("llm client close error: %v", err))
 	}
+
+	// Close HTTP server
+	if err := sg.httpServer.Shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("http server shutdown error: %v", err))
+	}
+
+	// Close DB connection
+	sg.db.Close()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("shutdown errors: %v", errs)
+	}
+	return nil
 }
