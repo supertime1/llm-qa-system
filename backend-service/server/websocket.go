@@ -67,6 +67,8 @@ var upgrader = websocket.Upgrader{
 }
 
 func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	log.Println("HandleWebSocket called - this should happen only once per client")
+
 	// Configure protojson
 	unmarshaler := protojson.UnmarshalOptions{DiscardUnknown: true}
 
@@ -100,6 +102,8 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 	// Message handling loop
 	for {
 		_, rawMsg, err := conn.ReadMessage()
+		log.Println("Received message on existing connection")
+
 		if err != nil {
 			log.Printf("ReadMessage error from %s: %v", role, err)
 			break
