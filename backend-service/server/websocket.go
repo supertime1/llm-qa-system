@@ -115,7 +115,7 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 		case pb.MessageType_PATIENT_MESSAGE:
 			if msg := wsMsg.GetMessage(); msg != nil {
 				// 1. Forward original message to doctor
-				s.broadcastToRole(sessionID, "doctor", &wsMsg)
+				s.broadcastToRole(connection.sessionID, "doctor", &wsMsg)
 
 				// 2. Write to Kafka for LLM processing
 				patientMsg := &pb.Message{
@@ -130,14 +130,14 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 				}
 
 				err = s.writer.WriteMessages(context.Background(), kafka.Message{
-					Key:   []byte(sessionID),
+					Key:   []byte(connection.sessionID),
 					Value: msgBytes,
 				})
 
 				if err != nil {
 					log.Printf("Error writing to Kafka: %v", err)
 					// Send error message to patient
-					s.broadcastToRole(sessionID, "doctor", &pb.WebSocketMessage{
+					s.broadcastToRole(connection.sessionID, "doctor", &pb.WebSocketMessage{
 						Type: pb.MessageType_ERROR,
 						Payload: &pb.WebSocketMessage_Error{
 							Error: &pb.Error{Message: "Failed to send message to LLM"},
@@ -148,7 +148,7 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 
 		case pb.MessageType_DOCTOR_MESSAGE:
 			if msg := wsMsg.GetMessage(); msg != nil {
-				s.broadcastToRole(sessionID, "patient", &wsMsg)
+				s.broadcastToRole(connection.sessionID, "patient", &wsMsg)
 			}
 
 		case pb.MessageType_DRAFT_REVIEW:
@@ -164,7 +164,7 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 							},
 						},
 					}
-					s.broadcastToRole(sessionID, "patient", responseMsg)
+					s.broadcastToRole(connection.sessionID, "patient", responseMsg)
 				}
 			}
 		}
