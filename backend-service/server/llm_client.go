@@ -18,7 +18,8 @@ import (
 type LLMClient struct {
 	client pb.MedicalQAServiceClient
 	conn   *grpc.ClientConn
-	kafka  *kafka.Writer
+	reader *kafka.Reader
+	writer *kafka.Writer
 }
 
 func NewLLMClient(addr string, kafkaBrokers []string) (*LLMClient, error) {
@@ -36,16 +37,19 @@ func NewLLMClient(addr string, kafkaBrokers []string) (*LLMClient, error) {
 		return nil, fmt.Errorf("failed to connect to LLM service at %s: %v", addr, err)
 	}
 
-	// Create Kafka writer just for llm-responses
-	w := NewKafkaWriter(kafkaBrokers, TopicLLMResponses)
-
 	log.Printf("Successfully connected to LLM service")
-	client := pb.NewMedicalQAServiceClient(conn)
-	return &LLMClient{
-		client: client,
+	grpcClient := pb.NewMedicalQAServiceClient(conn)
+	client := &LLMClient{
+		client: grpcClient,
 		conn:   conn,
-		kafka:  w,
-	}, nil
+		reader: NewKafkaReader(kafkaBrokers, TopicPatientMessages, GroupIDLLMClient),
+		writer: NewKafkaWriter(kafkaBrokers, TopicLLMResponses),
+	}
+
+	// Start consuming patient messages
+	go client.processPatientMessages()
+
+	return client, nil
 }
 
 func (c *LLMClient) RequestDraft(sessionID string, message string) error {
@@ -106,7 +110,7 @@ func (c *LLMClient) RequestDraft(sessionID string, message string) error {
 		return fmt.Errorf("failed to marshal draft: %v", err)
 	}
 
-	err = c.kafka.WriteMessages(context.Background(),
+	err = c.writer.WriteMessages(context.Background(),
 		kafka.Message{
 			Key:   []byte(sessionID),
 			Value: msgBytes,
@@ -119,10 +123,32 @@ func (c *LLMClient) RequestDraft(sessionID string, message string) error {
 	return nil
 }
 
+func (c *LLMClient) processPatientMessages() {
+	for {
+		msg, err := c.reader.ReadMessage(context.Background())
+		if err != nil {
+			log.Printf("Error reading patient message: %v", err)
+			continue
+		}
+
+		var patientMsg pb.Message
+		if err := proto.Unmarshal(msg.Value, &patientMsg); err != nil {
+			log.Printf("Error unmarshaling patient message: %v", err)
+			continue
+		}
+
+		// Process with LLM service
+		if err := c.RequestDraft(string(msg.Key), patientMsg.Content); err != nil {
+			log.Printf("Error processing with LLM: %v", err)
+			// Could implement retry logic here
+		}
+	}
+}
+
 func (c *LLMClient) Close() error {
 	var errs []error
-	if c.kafka != nil {
-		if err := c.kafka.Close(); err != nil {
+	if c.writer != nil {
+		if err := c.writer.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to close kafka writer: %v", err))
 		}
 	}

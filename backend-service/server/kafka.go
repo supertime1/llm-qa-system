@@ -11,10 +11,16 @@ import (
 
 // Define all Kafka topics as constants
 const (
-	TopicLLMResponses = "llm-responses"
-	// TopicUserMessages  = "user-messages"
+	TopicLLMResponses    = "llm-responses"
+	TopicPatientMessages = "patient-messages"
 	// TopicDoctorReviews = "doctor-reviews"
 	// Add other topics as needed
+)
+
+// Define consumer group IDs
+const (
+	GroupIDLLMClient = "llm-client"
+	GroupIDWebSocket = "websocket-server"
 )
 
 // KafkaConfig holds configuration for Kafka
@@ -27,8 +33,7 @@ type KafkaConfig struct {
 func GetDefaultTopics() []string {
 	return []string{
 		TopicLLMResponses,
-		// TopicUserMessages,
-		// TopicDoctorReviews,
+		TopicPatientMessages,
 	}
 }
 
@@ -68,4 +73,18 @@ func NewKafkaWriter(brokers []string, topic string) *kafka.Writer {
 		WriteTimeout: 10 * time.Second,
 		BatchSize:    1, // For immediate writes
 	}
+}
+
+// NewKafkaReader creates a new Kafka reader instance
+func NewKafkaReader(brokers []string, topic string, groupID string) *kafka.Reader {
+	return kafka.NewReader(kafka.ReaderConfig{
+		Brokers: brokers,
+		Topic:   topic,
+		GroupID: groupID,
+		// Add some sensible defaults
+		MinBytes:    10e3,              // 10KB minimum batch size
+		MaxBytes:    10e6,              // 10MB maximum batch size
+		MaxWait:     time.Second,       // Maximum amount of time to wait for new data
+		StartOffset: kafka.FirstOffset, // Start from oldest message if no offset is stored
+	})
 }

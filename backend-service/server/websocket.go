@@ -35,6 +35,7 @@ type WebSocketServer struct {
 	sessions   map[string]*ChatSession
 	mu         sync.RWMutex
 	reader     *kafka.Reader
+	writer     *kafka.Writer
 	cancelFunc context.CancelFunc
 }
 
@@ -46,11 +47,8 @@ func NewWebSocketServer(base *BaseServer, llmClient *LLMClient, kafkaBrokers []s
 		llmClient:  llmClient,
 		sessions:   make(map[string]*ChatSession),
 		mu:         sync.RWMutex{},
-		reader: kafka.NewReader(kafka.ReaderConfig{
-			Brokers: kafkaBrokers,
-			Topic:   TopicLLMResponses,
-			GroupID: "websocket-server",
-		}),
+		reader:     NewKafkaReader(kafkaBrokers, TopicLLMResponses, GroupIDWebSocket),
+		writer:     NewKafkaWriter(kafkaBrokers, TopicPatientMessages),
 		cancelFunc: cancel,
 	}
 
@@ -119,19 +117,32 @@ func (s *WebSocketServer) HandleWebSocket(w http.ResponseWriter, r *http.Request
 				// 1. Forward original message to doctor
 				s.broadcastToRole(sessionID, "doctor", &wsMsg)
 
-				// 2. Request draft from LLM service
-				// The draft will be sent to doctor via Kafka consumer when ready
-				if err := s.llmClient.RequestDraft(sessionID, msg.Content); err != nil {
-					log.Printf("Error requesting draft: %v", err)
-					errorMsg := &pb.WebSocketMessage{
+				// 2. Write to Kafka for LLM processing
+				patientMsg := &pb.Message{
+					Content:   msg.Content,
+					Timestamp: timestamppb.Now(),
+				}
+
+				msgBytes, err := proto.Marshal(patientMsg)
+				if err != nil {
+					log.Printf("Error marshaling message: %v", err)
+					continue
+				}
+
+				err = s.writer.WriteMessages(context.Background(), kafka.Message{
+					Key:   []byte(sessionID),
+					Value: msgBytes,
+				})
+
+				if err != nil {
+					log.Printf("Error writing to Kafka: %v", err)
+					// Send error message to patient
+					s.broadcastToRole(sessionID, "doctor", &pb.WebSocketMessage{
 						Type: pb.MessageType_ERROR,
 						Payload: &pb.WebSocketMessage_Error{
-							Error: &pb.Error{
-								Message: "Failed to generate AI draft",
-							},
+							Error: &pb.Error{Message: "Failed to send message to LLM"},
 						},
-					}
-					s.broadcastToRole(sessionID, "doctor", errorMsg)
+					})
 				}
 			}
 
