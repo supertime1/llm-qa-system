@@ -42,10 +42,14 @@ class MedicalQAService(medical_service_pb2_grpc.MedicalQAServiceServicer):
         self.llm_service = LLMService(self.config)
         self.logger = logging.getLogger(__name__)
 
+    
     async def GenerateDraftAnswer(self, request, context):
         try:
             self.logger.info(f"Received question request: {request.question_id}")
             
+            
+
+
             answer, confidence_score, references = await self.llm_service.generate_answer(
                 request.question_text,
                 request.user_context
