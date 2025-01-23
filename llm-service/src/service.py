@@ -47,8 +47,20 @@ class MedicalQAService(medical_service_pb2_grpc.MedicalQAServiceServicer):
         try:
             self.logger.info(f"Received question request: {request.question_id}")
             
+            # category = await self.llm_service.triage_question(request.question_text)
             
+            # if category == MedicalQAService.QuestionCategory.MEDICAL:
+            #     answer, confidence_score, references = await self.llm_service.generate_answer(
+            #         request.question_text,
+            #         request.user_context
+            #     )
+            # elif category == MedicalQAService.QuestionCategory.TRANSPORT:
+            #     print("Transport category")
 
+            # elif category == MedicalQAService.QuestionCategory.SCHEDULE:
+            #     print("Schedule category")
+            # else:
+            #     print("Taxonomy category")
 
             answer, confidence_score, references = await self.llm_service.generate_answer(
                 request.question_text,
